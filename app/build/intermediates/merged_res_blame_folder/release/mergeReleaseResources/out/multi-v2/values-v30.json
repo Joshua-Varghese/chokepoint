@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.joshua.chokepoint.app-mergeReleaseResources-50:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\joshu\\.gradle\\caches\\8.13\\transforms\\2f6d3e6d20a67783697c9a0e737c792b\\transformed\\material3-release\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}
