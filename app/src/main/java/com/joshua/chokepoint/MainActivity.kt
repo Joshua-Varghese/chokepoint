@@ -1,0 +1,234 @@
+package com.joshua.chokepoint
+
+import android.app.Activity
+import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import com.joshua.chokepoint.ui.screens.DashboardScreen
+import com.joshua.chokepoint.ui.screens.ForgotPasswordScreen
+import com.joshua.chokepoint.ui.screens.LandingScreen
+import com.joshua.chokepoint.ui.screens.LoginScreen
+import com.joshua.chokepoint.ui.screens.SignUpScreen
+import com.joshua.chokepoint.ui.theme.ChokepointandroidTheme
+
+class MainActivity : ComponentActivity() {
+
+    private lateinit var auth: FirebaseAuth
+    private lateinit var googleSignInClient: GoogleSignInClient
+
+    private var isLoading by mutableStateOf(false)
+    private var onLoginSuccess: (() -> Unit)? = null
+
+    private val signInLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                try {
+                    val account = task.getResult(ApiException::class.java)
+                    firebaseAuthWithGoogle(account.idToken!!)
+                } catch (e: Exception) {
+                    Log.e("GoogleSignIn", "Google sign-in failed", e)
+                    isLoading = false
+                    Toast.makeText(this, "Google Sign-In failed", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                isLoading = false
+            }
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setupGoogleSignIn()
+
+        setContent {
+            ChokepointandroidTheme {
+                val navController = rememberNavController()
+                
+                // Determine start destination
+                val currentUser = auth.currentUser
+                val startDest = if (currentUser != null) "dashboard" else "landing"
+
+                NavHost(navController = navController, startDestination = startDest) {
+                    
+                    composable("landing") {
+                        LandingScreen(
+                            onGetStartedClick = {
+                                navController.navigate("login")
+                            }
+                        )
+                    }
+                    
+                    composable("login") {
+                        LoginScreen(
+                            isLoading = isLoading,
+                            onLoginClick = { email, password ->
+                                isLoading = true
+                                signInWithEmail(email, password) { success ->
+                                    isLoading = false
+                                    if (success) {
+                                        Toast.makeText(this@MainActivity, "Login Successful!", Toast.LENGTH_SHORT).show()
+                                        navController.navigate("dashboard") {
+                                            popUpTo("landing") { inclusive = true }
+                                        }
+                                    } else {
+                                        Toast.makeText(this@MainActivity, "Login Failed", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onGoogleSignInClick = {
+                                isLoading = true
+                                onLoginSuccess = {
+                                    Toast.makeText(this@MainActivity, "Google Login Successful!", Toast.LENGTH_SHORT).show()
+                                    navController.navigate("dashboard") {
+                                        popUpTo("landing") { inclusive = true }
+                                    }
+                                }
+                                signInWithGoogle()
+                            },
+                            onForgotPasswordClick = {
+                                navController.navigate("forgot_password")
+                            },
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onSignUpClick = {
+                                navController.navigate("signup")
+                            }
+                        )
+                    }
+
+                    composable("signup") {
+                        SignUpScreen(
+                            isLoading = isLoading,
+                            onSignUpClick = { email, password ->
+                                isLoading = true
+                                signUpWithEmail(email, password) { success, message ->
+                                    isLoading = false
+                                    if (success) {
+                                        Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
+                                        navController.navigate("dashboard") {
+                                            popUpTo("landing") { inclusive = true }
+                                        }
+                                    } else {
+                                        Toast.makeText(this@MainActivity, "Sign Up Failed: $message", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onBackClick = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                    
+                    composable("forgot_password") {
+                        ForgotPasswordScreen(
+                            isLoading = isLoading,
+                            onSendResetEmailClick = { email ->
+                                isLoading = true
+                                sendPasswordResetEmail(email) {
+                                    isLoading = false
+                                    Toast.makeText(this@MainActivity, "Reset link sent if email exists.", Toast.LENGTH_LONG).show()
+                                    navController.popBackStack()
+                                }
+                            },
+                            onBackClick = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                    
+                    composable("dashboard") {
+                        DashboardScreen(
+                            onLogoutClick = {
+                                auth.signOut()
+                                // Sign out of Google as well
+                                googleSignInClient.signOut()
+                                navController.navigate("landing") {
+                                    popUpTo("dashboard") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupGoogleSignIn() {
+        auth = FirebaseAuth.getInstance()
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(getString(R.string.default_web_client_id))
+            .requestEmail()
+            .build()
+
+        googleSignInClient = GoogleSignIn.getClient(this, gso)
+    }
+
+    private fun signInWithGoogle() {
+        val intent = googleSignInClient.signInIntent
+        signInLauncher.launch(intent)
+    }
+
+    private fun firebaseAuthWithGoogle(idToken: String) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener(this) { task ->
+                isLoading = false
+                if (task.isSuccessful) {
+                    Log.d("Auth", "Login success: ${auth.currentUser?.email}")
+                    onLoginSuccess?.invoke()
+                } else {
+                    Log.e("Auth", "Firebase auth failed", task.exception)
+                    Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
+                }
+            }
+    }
+
+    private fun signInWithEmail(email: String, pass: String, onResult: (Boolean) -> Unit) {
+        auth.signInWithEmailAndPassword(email, pass)
+            .addOnCompleteListener(this) { task ->
+                if (task.isSuccessful) {
+                    onResult(true)
+                } else {
+                    Log.w("Auth", "signInWithEmail:failure", task.exception)
+                    onResult(false)
+                }
+            }
+    }
+
+    private fun signUpWithEmail(email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+        auth.createUserWithEmailAndPassword(email, pass)
+            .addOnCompleteListener(this) { task ->
+                if (task.isSuccessful) {
+                    onResult(true, null)
+                } else {
+                    Log.w("Auth", "createUserWithEmail:failure", task.exception)
+                    onResult(false, task.exception?.localizedMessage)
+                }
+            }
+    }
+
+    private fun sendPasswordResetEmail(email: String, onComplete: () -> Unit) {
+        auth.sendPasswordResetEmail(email)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    Log.d("Auth", "Email sent.")
+                }
+                onComplete()
+            }
+    }
+}
