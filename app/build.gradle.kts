@@ -62,8 +62,11 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
+<<<<<<< HEAD
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("com.google.android.gms:play-services-auth:21.3.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.6")
+=======
+>>>>>>> 1186f8066fd3f89a8225d464ba7e55c21b57fe1a
 
 }

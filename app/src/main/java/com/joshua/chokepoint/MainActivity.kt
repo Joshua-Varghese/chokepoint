@@ -11,6 +11,15 @@ import androidx.compose.runtime.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -34,6 +43,11 @@ class MainActivity : ComponentActivity() {
 
     private val signInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+
+    private val signInLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            isLoading = false
+
             if (result.resultCode == Activity.RESULT_OK) {
                 val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
                 try {
@@ -46,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 }
             } else {
                 isLoading = false
+                }
             }
         }
 
@@ -164,12 +179,31 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+            MaterialTheme {
+                LoginScreen(
+                    isLoading = isLoading,
+                    onGoogleSignInClick = {
+                        isLoading = true
+                        signInWithGoogle()
+                    }
+                )
             }
         }
     }
 
     private fun setupGoogleSignIn() {
         auth = FirebaseAuth.getInstance()
+    override fun onStart() {
+        super.onStart()
+        val user = FirebaseAuth.getInstance().currentUser
+        if (user != null) {
+            Log.d("Auth", "Already logged in: ${user.email}")
+        }
+    }
+
+    private fun setupGoogleSignIn() {
+        auth = FirebaseAuth.getInstance()
+
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(getString(R.string.default_web_client_id))
             .requestEmail()
@@ -230,5 +264,50 @@ class MainActivity : ComponentActivity() {
                 }
                 onComplete()
             }
+    }
+
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener(this) { task ->
+                isLoading = false
+
+                if (task.isSuccessful) {
+                    Log.d("Auth", "Login success: ${auth.currentUser?.email}")
+                } else {
+                    Log.e("Auth", "Firebase auth failed", task.exception)
+                }
+            }
+    }
+}
+
+@Composable
+fun LoginScreen(
+    isLoading: Boolean,
+    onGoogleSignInClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+
+        Text(
+            text = "Chokepoint",
+            style = MaterialTheme.typography.headlineLarge
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (isLoading) {
+            CircularProgressIndicator()
+        } else {
+            Button(
+                onClick = onGoogleSignInClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Sign in with Google")
+            }
+        }
     }
 }
