@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.joshua.chokepoint.app-mergeDebugResources-49:/values-watch-v20/values-watch-v20.xml",
+            "outputFile": "com.joshua.chokepoint.app-mergeDebugResources-54:/values-watch-v20/values-watch-v20.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\joshu\\.gradle\\caches\\8.13\\transforms\\2ff7d5d1d322bc54e97990f7123b6da3\\transformed\\play-services-auth-20.7.0\\res\\values-watch-v20\\values.xml",
+                    "source": "C:\\Users\\joshu\\.gradle\\caches\\8.13\\transforms\\87297fa1463e327430adb7a7198e48b2\\transformed\\play-services-auth-21.3.0\\res\\values-watch-v20\\values.xml",
                     "from": {
                         "startLines": "4,5,6,7,8,9,10,11",
                         "startColumns": "0,0,0,0,0,0,0,0",

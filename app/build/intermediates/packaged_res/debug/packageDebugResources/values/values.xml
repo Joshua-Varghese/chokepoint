@@ -8,7 +8,7 @@
     <color name="teal_700">#FF018786</color>
     <color name="white">#FFFFFFFF</color>
     <string name="app_name">chokepoint-android</string>
-    <string name="default_web_client_id">YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+    <string name="default_web_client_id" translatable="false">164679848850-ct4nn3gnb5hu61doi8oivd5lj9mpq66h.apps.googleusercontent.com</string>
     <string name="gcm_defaultSenderId" translatable="false">164679848850</string>
     <string name="google_api_key" translatable="false">AIzaSyDyoKR0xLGDOUU2cNhphu95bjS-0OKWwdM</string>
     <string name="google_app_id" translatable="false">1:164679848850:android:f2f6f8d7e75333a8d6a74b</string>

@@ -11,15 +11,6 @@ import androidx.compose.runtime.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -43,24 +34,26 @@ class MainActivity : ComponentActivity() {
 
     private val signInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-
-    private val signInLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            isLoading = false
-
             if (result.resultCode == Activity.RESULT_OK) {
+                Log.d("GoogleSignIn", "Sign-in Intent Result OK. Processing data...")
                 val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
                 try {
                     val account = task.getResult(ApiException::class.java)
+                    Log.d("GoogleSignIn", "Google Account retrieved: ${account.email}. ID Token length: ${account.idToken?.length}")
                     firebaseAuthWithGoogle(account.idToken!!)
-                } catch (e: Exception) {
-                    Log.e("GoogleSignIn", "Google sign-in failed", e)
+                } catch (e: ApiException) {
                     isLoading = false
-                    Toast.makeText(this, "Google Sign-In failed", Toast.LENGTH_SHORT).show()
+                    Log.e("GoogleSignIn", "Google sign-in failed. Status Code: ${e.statusCode}", e)
+                    Toast.makeText(this, "Google Sign-In Error: ${e.statusCode}", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    isLoading = false
+                    Log.e("GoogleSignIn", "Unknown sign-in error", e)
+                    Toast.makeText(this, "Sign-In Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                 }
             } else {
                 isLoading = false
-                }
+                Log.w("GoogleSignIn", "Sign-in cancelled or failed. ResultCode: ${result.resultCode}")
+                Toast.makeText(this, "Sign-In Cancelled", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -72,13 +65,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             ChokepointandroidTheme {
                 val navController = rememberNavController()
-                
+
                 // Determine start destination
                 val currentUser = auth.currentUser
                 val startDest = if (currentUser != null) "dashboard" else "landing"
 
                 NavHost(navController = navController, startDestination = startDest) {
-                    
+
                     composable("landing") {
                         LandingScreen(
                             onGetStartedClick = {
@@ -86,7 +79,7 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
-                    
+
                     composable("login") {
                         LoginScreen(
                             isLoading = isLoading,
@@ -148,7 +141,7 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
-                    
+
                     composable("forgot_password") {
                         ForgotPasswordScreen(
                             isLoading = isLoading,
@@ -165,7 +158,7 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
-                    
+
                     composable("dashboard") {
                         DashboardScreen(
                             onLogoutClick = {
@@ -179,20 +172,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-            MaterialTheme {
-                LoginScreen(
-                    isLoading = isLoading,
-                    onGoogleSignInClick = {
-                        isLoading = true
-                        signInWithGoogle()
-                    }
-                )
             }
         }
     }
 
-    private fun setupGoogleSignIn() {
-        auth = FirebaseAuth.getInstance()
     override fun onStart() {
         super.onStart()
         val user = FirebaseAuth.getInstance().currentUser
@@ -204,8 +187,13 @@ class MainActivity : ComponentActivity() {
     private fun setupGoogleSignIn() {
         auth = FirebaseAuth.getInstance()
 
+        if (BuildConfig.DEFAULT_WEB_CLIENT_ID.isEmpty() || BuildConfig.DEFAULT_WEB_CLIENT_ID == "null") {
+            Log.e("Auth", "Web Client ID is not set! Check local.properties.")
+            Toast.makeText(this, "Config Error: Web Client ID missing", Toast.LENGTH_LONG).show()
+        }
+
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(getString(R.string.default_web_client_id))
+            .requestIdToken(BuildConfig.DEFAULT_WEB_CLIENT_ID)
             .requestEmail()
             .build()
 
@@ -264,50 +252,5 @@ class MainActivity : ComponentActivity() {
                 }
                 onComplete()
             }
-    }
-
-        auth.signInWithCredential(credential)
-            .addOnCompleteListener(this) { task ->
-                isLoading = false
-
-                if (task.isSuccessful) {
-                    Log.d("Auth", "Login success: ${auth.currentUser?.email}")
-                } else {
-                    Log.e("Auth", "Firebase auth failed", task.exception)
-                }
-            }
-    }
-}
-
-@Composable
-fun LoginScreen(
-    isLoading: Boolean,
-    onGoogleSignInClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Text(
-            text = "Chokepoint",
-            style = MaterialTheme.typography.headlineLarge
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        if (isLoading) {
-            CircularProgressIndicator()
-        } else {
-            Button(
-                onClick = onGoogleSignInClick,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Sign in with Google")
-            }
-        }
     }
 }
