@@ -171,6 +171,13 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(Unit) {
                             viewModel.connect()
                         }
+                        
+                        // Disconnect on leave
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                viewModel.disconnect()
+                            }
+                        }
 
                         DashboardScreen(
                             sensorData = sensorData,
