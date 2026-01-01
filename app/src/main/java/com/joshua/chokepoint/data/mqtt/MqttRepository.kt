@@ -11,7 +11,13 @@ import info.mqtt.android.service.MqttAndroidClient
 import org.eclipse.paho.client.mqttv3.*
 import org.json.JSONObject
 
-class MqttRepository(private val context: Context) {
+import com.joshua.chokepoint.data.firestore.FirestoreRepository
+
+class MqttRepository(
+    private val context: Context,
+    private val firestoreRepository: FirestoreRepository
+) {
+
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -110,7 +116,12 @@ class MqttRepository(private val context: Context) {
             val nh3 = json.optDouble("nh3", 0.0)
             val smoke = json.optDouble("smoke", 0.0)
             
-            _sensorData.value = SensorData(co2, nh3, smoke)
+            val data = SensorData(co2, nh3, smoke)
+            _sensorData.value = data
+            
+            // Save to Firestore for history
+            firestoreRepository.saveSensorData(data)
+            
         } catch (e: Exception) {
             Log.e("MQTT", "JSON Parsing error", e)
         }

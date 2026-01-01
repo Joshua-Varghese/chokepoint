@@ -26,7 +26,8 @@ import androidx.compose.ui.unit.sp
 fun DashboardScreen(
     sensorData: com.joshua.chokepoint.data.model.SensorData,
     isConnected: Boolean,
-    onLogoutClick: () -> Unit
+    onLogoutClick: () -> Unit,
+    onHistoryClick: () -> Unit
 ) {
     Scaffold(
         bottomBar = {
@@ -40,10 +41,10 @@ fun DashboardScreen(
                     onClick = { }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Devices") },
-                    label = { Text("Devices") },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History") },
+                    label = { Text("History") },
                     selected = false,
-                    onClick = { }
+                    onClick = { onHistoryClick() }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.ShoppingBag, contentDescription = "Market") },

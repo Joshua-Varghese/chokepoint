@@ -84,6 +84,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.play.services.auth)
     implementation(libs.androidx.material.icons.extended)

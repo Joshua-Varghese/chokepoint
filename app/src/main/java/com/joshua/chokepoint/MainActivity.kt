@@ -160,7 +160,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("dashboard") {
-                        val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext) }
+                        val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext, firestoreRepository) }
                         val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository) }
                         
                         // Collect state
@@ -185,11 +186,23 @@ class MainActivity : ComponentActivity() {
                             onLogoutClick = {
                                 viewModel.disconnect()
                                 auth.signOut()
-                                // Sign out of Google as well
                                 googleSignInClient.signOut()
                                 navController.navigate("landing") {
                                     popUpTo("dashboard") { inclusive = true }
                                 }
+                            },
+                            onHistoryClick = {
+                                navController.navigate("analytics")
+                            }
+                        )
+                    }
+
+                    composable("analytics") {
+                        val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        com.joshua.chokepoint.ui.screens.AnalyticsScreen(
+                            repository = firestoreRepository,
+                            onBackClick = {
+                                navController.popBackStack()
                             }
                         )
                     }
