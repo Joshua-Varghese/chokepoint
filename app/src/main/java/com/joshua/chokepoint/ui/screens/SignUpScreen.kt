@@ -25,33 +25,29 @@ fun SignUpScreen(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var emailError by remember { mutableStateOf<String?>(null) }
-    var passwordError by remember { mutableStateOf<String?>(null) }
+    var emailTouched by remember { mutableStateOf(false) }
+    var passwordTouched by remember { mutableStateOf(false) }
 
-    fun validateAndSignUp() {
-        var isValid = true
-        
-        if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            emailError = "Invalid email address"
-            isValid = false
-        } else {
-            emailError = null
-        }
+    val emailErrorText = remember(email) {
+        if (email.isBlank()) "Email cannot be empty"
+        else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) "Invalid email address"
+        else null
+    }
 
-        if (password.length < 6) {
-            passwordError = "Password must be at least 6 characters"
-            isValid = false
-        } else if (password != confirmPassword) {
-            passwordError = "Passwords do not match"
-            isValid = false
-        } else {
-            passwordError = null
-        }
-
-        if (isValid) {
-            onSignUpClick(email, password)
+    val passwordErrorText = remember(password) {
+        when {
+            password.length < 8 -> "Password must be at least 8 characters"
+            !password.any { it.isUpperCase() } -> "Password must contain an uppercase letter"
+            !password.any { !it.isLetterOrDigit() } -> "Password must contain a special character"
+            else -> null
         }
     }
+    
+    val confirmPasswordErrorText = remember(password, confirmPassword) {
+        if (confirmPassword != password) "Passwords do not match" else null
+    }
+
+    val isFormValid = emailErrorText == null && passwordErrorText == null && confirmPasswordErrorText == null
 
     Column(
         modifier = Modifier
@@ -83,11 +79,11 @@ fun SignUpScreen(
                 value = email,
                 onValueChange = { 
                     email = it
-                    if (emailError != null) emailError = null
+                    emailTouched = true
                 },
                 label = { Text("Email") },
-                isError = emailError != null,
-                supportingText = { emailError?.let { Text(it) } },
+                isError = emailTouched && emailErrorText != null,
+                supportingText = { if (emailTouched) emailErrorText?.let { Text(it) } },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
@@ -101,10 +97,11 @@ fun SignUpScreen(
                 value = password,
                 onValueChange = { 
                     password = it
-                    if (passwordError != null) passwordError = null
+                    passwordTouched = true
                 },
                 label = { Text("Password") },
-                isError = passwordError != null,
+                isError = passwordTouched && passwordErrorText != null,
+                supportingText = { if (passwordTouched) passwordErrorText?.let { Text(it) } },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
@@ -123,13 +120,10 @@ fun SignUpScreen(
 
             OutlinedTextField(
                 value = confirmPassword,
-                onValueChange = { 
-                    confirmPassword = it
-                    if (passwordError != null) passwordError = null
-                },
+                onValueChange = { confirmPassword = it },
                 label = { Text("Confirm Password") },
-                isError = passwordError != null,
-                supportingText = { passwordError?.let { Text(it) } },
+                isError = confirmPasswordErrorText != null && confirmPassword.isNotEmpty(),
+                supportingText = { if (confirmPassword.isNotEmpty()) confirmPasswordErrorText?.let { Text(it) } },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(
@@ -144,8 +138,15 @@ fun SignUpScreen(
                 CircularProgressIndicator()
             } else {
                 Button(
-                    onClick = { validateAndSignUp() },
-                    modifier = Modifier.fillMaxWidth()
+                    onClick = { 
+                         emailTouched = true
+                         passwordTouched = true
+                         if (isFormValid) {
+                             onSignUpClick(email, password) 
+                         }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = isFormValid && !isLoading
                 ) {
                     Text("Sign Up")
                 }
