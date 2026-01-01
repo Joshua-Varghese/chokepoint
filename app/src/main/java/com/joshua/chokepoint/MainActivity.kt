@@ -160,8 +160,23 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("dashboard") {
+                        val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext) }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository) }
+                        
+                        // Collect state
+                        val isConnected by viewModel.isConnected.collectAsState()
+                        val sensorData by viewModel.sensorData.collectAsState()
+                        
+                        // Connect on launch
+                        LaunchedEffect(Unit) {
+                            viewModel.connect()
+                        }
+
                         DashboardScreen(
+                            sensorData = sensorData,
+                            isConnected = isConnected,
                             onLogoutClick = {
+                                viewModel.disconnect()
                                 auth.signOut()
                                 // Sign out of Google as well
                                 googleSignInClient.signOut()
