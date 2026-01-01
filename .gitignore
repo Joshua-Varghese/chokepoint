@@ -8,12 +8,9 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-<<<<<<< HEAD
-/app/build
-=======
 /build
+/app/build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
 google-services.json
