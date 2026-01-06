@@ -31,6 +31,15 @@ android {
         
         val webClientId = localProperties.getProperty("default_web_client_id") ?: ""
         buildConfigField("String", "DEFAULT_WEB_CLIENT_ID", "\"$webClientId\"")
+
+        val mqttBrokerUrl = localProperties.getProperty("mqtt_broker_url") ?: ""
+        buildConfigField("String", "MQTT_BROKER_URL", "\"$mqttBrokerUrl\"")
+
+        val mqttUsername = localProperties.getProperty("mqtt_username") ?: ""
+        buildConfigField("String", "MQTT_USERNAME", "\"$mqttUsername\"")
+
+        val mqttPassword = localProperties.getProperty("mqtt_password") ?: ""
+        buildConfigField("String", "MQTT_PASSWORD", "\"$mqttPassword\"")
     }
 
     buildTypes {
@@ -75,8 +84,11 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.play.services.auth)
     implementation(libs.androidx.material.icons.extended)
-
+    implementation(libs.paho.mqtt)
+    implementation(libs.paho.android.service)
+    implementation(libs.androidx.localbroadcastmanager)
 }

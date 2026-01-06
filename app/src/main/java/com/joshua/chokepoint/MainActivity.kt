@@ -160,14 +160,49 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("dashboard") {
+                        val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext, firestoreRepository) }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository) }
+                        
+                        // Collect state
+                        val isConnected by viewModel.isConnected.collectAsState()
+                        val sensorData by viewModel.sensorData.collectAsState()
+                        
+                        // Connect on launch
+                        LaunchedEffect(Unit) {
+                            viewModel.connect()
+                        }
+                        
+                        // Disconnect on leave
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                viewModel.disconnect()
+                            }
+                        }
+
                         DashboardScreen(
+                            sensorData = sensorData,
+                            isConnected = isConnected,
                             onLogoutClick = {
+                                viewModel.disconnect()
                                 auth.signOut()
-                                // Sign out of Google as well
                                 googleSignInClient.signOut()
                                 navController.navigate("landing") {
                                     popUpTo("dashboard") { inclusive = true }
                                 }
+                            },
+                            onHistoryClick = {
+                                navController.navigate("analytics")
+                            }
+                        )
+                    }
+
+                    composable("analytics") {
+                        val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        com.joshua.chokepoint.ui.screens.AnalyticsScreen(
+                            repository = firestoreRepository,
+                            onBackClick = {
+                                navController.popBackStack()
                             }
                         )
                     }

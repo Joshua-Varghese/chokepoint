@@ -12,6 +12,8 @@ navigationCompose = "2.8.5"
 playServicesAuth = "21.3.0"
 firebaseBom = "34.7.0"
 materialIconsExtended = "1.7.6"
+pahoMqtt = "1.1.1"
+localBroadcastManager = "1.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -33,7 +35,11 @@ play-services-auth = { group = "com.google.android.gms", name = "play-services-a
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
+paho-mqtt = { group = "org.eclipse.paho", name = "org.eclipse.paho.client.mqttv3", version = "1.2.5" }
+paho-android-service = { group = "com.github.hannesa2", name = "paho.mqtt.android", version = "4.3" }
+androidx-localbroadcastmanager = { group = "androidx.localbroadcastmanager", name = "localbroadcastmanager", version.ref = "localBroadcastManager" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
