@@ -14,6 +14,7 @@ firebaseBom = "34.7.0"
 materialIconsExtended = "1.7.6"
 pahoMqtt = "1.1.1"
 localBroadcastManager = "1.1.0"
+coil = "2.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -40,6 +41,7 @@ androidx-material-icons-extended = { group = "androidx.compose.material", name =
 paho-mqtt = { group = "org.eclipse.paho", name = "org.eclipse.paho.client.mqttv3", version = "1.2.5" }
 paho-android-service = { group = "com.github.hannesa2", name = "paho.mqtt.android", version = "4.3" }
 androidx-localbroadcastmanager = { group = "androidx.localbroadcastmanager", name = "localbroadcastmanager", version.ref = "localBroadcastManager" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

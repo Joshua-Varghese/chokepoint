@@ -91,4 +91,5 @@ dependencies {
     implementation(libs.paho.mqtt)
     implementation(libs.paho.android.service)
     implementation(libs.androidx.localbroadcastmanager)
+    implementation(libs.coil.compose)
 }

@@ -193,6 +193,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onHistoryClick = {
                                 navController.navigate("analytics")
+                            },
+                            onMarketplaceClick = {
+                                navController.navigate("marketplace")
                             }
                         )
                     }
@@ -203,6 +206,52 @@ class MainActivity : ComponentActivity() {
                             repository = firestoreRepository,
                             onBackClick = {
                                 navController.popBackStack()
+                            }
+                        )
+                    }
+
+                    composable("marketplace") {
+                        val marketplaceRepository = remember { com.joshua.chokepoint.data.repository.MarketplaceRepositoryImpl() }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.MarketplaceViewModel(marketplaceRepository) }
+                        
+                        com.joshua.chokepoint.ui.screens.MarketplaceScreen(
+                            viewModel = viewModel,
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onProductClick = { productId ->
+                                navController.navigate("product_detail/$productId")
+                            },
+                            onCartClick = {
+                                navController.navigate("cart")
+                            }
+                        )
+                    }
+
+                    composable("cart") {
+                        val cartRepository = remember { com.joshua.chokepoint.data.repository.CartRepositoryImpl() }
+                        com.joshua.chokepoint.ui.screens.CartScreen(
+                            repository = cartRepository,
+                            onBackClick = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+
+                    composable("product_detail/{productId}") { backStackEntry ->
+                        val productId = backStackEntry.arguments?.getString("productId") ?: return@composable
+                        val marketplaceRepository = remember { com.joshua.chokepoint.data.repository.MarketplaceRepositoryImpl() }
+                        val cartRepository = remember { com.joshua.chokepoint.data.repository.CartRepositoryImpl() }
+                        
+                        com.joshua.chokepoint.ui.screens.ProductDetailScreen(
+                            productId = productId,
+                            repository = marketplaceRepository,
+                            cartRepository = cartRepository,
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onCartClick = {
+                                navController.navigate("cart")
                             }
                         )
                     }

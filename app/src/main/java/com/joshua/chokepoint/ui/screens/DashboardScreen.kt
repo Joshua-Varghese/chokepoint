@@ -27,7 +27,8 @@ fun DashboardScreen(
     sensorData: com.joshua.chokepoint.data.model.SensorData,
     isConnected: Boolean,
     onLogoutClick: () -> Unit,
-    onHistoryClick: () -> Unit
+    onHistoryClick: () -> Unit,
+    onMarketplaceClick: () -> Unit
 ) {
     Scaffold(
         bottomBar = {
@@ -50,7 +51,7 @@ fun DashboardScreen(
                     icon = { Icon(Icons.Filled.ShoppingBag, contentDescription = "Market") },
                     label = { Text("Market") },
                     selected = false,
-                    onClick = { }
+                    onClick = { onMarketplaceClick() }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
