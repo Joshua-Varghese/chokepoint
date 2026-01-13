@@ -6,5 +6,6 @@ data class Product(
     val description: String = "",
     val price: Double = 0.0,
     val imageUrl: String = "",
-    val inStock: Boolean = true
+    val inStock: Boolean = true,
+    val quirks: List<String> = emptyList()
 )
