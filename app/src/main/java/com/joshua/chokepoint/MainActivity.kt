@@ -23,6 +23,9 @@ import com.joshua.chokepoint.ui.screens.LandingScreen
 import com.joshua.chokepoint.ui.screens.LoginScreen
 import com.joshua.chokepoint.ui.screens.SignUpScreen
 import com.joshua.chokepoint.ui.theme.ChokepointandroidTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -162,11 +165,13 @@ class MainActivity : ComponentActivity() {
                     composable("dashboard") {
                         val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
                         val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext, firestoreRepository) }
-                        val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository) }
+                        // Inject firestoreRepository here too
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository, firestoreRepository) }
                         
                         // Collect state
                         val isConnected by viewModel.isConnected.collectAsState()
                         val sensorData by viewModel.sensorData.collectAsState()
+                        val savedDevices by viewModel.savedDevices.collectAsState() // Collect devices
                         
                         // Connect on launch
                         LaunchedEffect(Unit) {
@@ -183,6 +188,7 @@ class MainActivity : ComponentActivity() {
                         DashboardScreen(
                             sensorData = sensorData,
                             isConnected = isConnected,
+                            savedDevices = savedDevices, // Pass it
                             onLogoutClick = {
                                 viewModel.disconnect()
                                 auth.signOut()
@@ -196,6 +202,37 @@ class MainActivity : ComponentActivity() {
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
+                            },
+                             onDevicesClick = {
+                                navController.navigate("devices")
+                            }
+                        )
+                    }
+
+                    composable("devices") {
+                        com.joshua.chokepoint.ui.screens.DevicesScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onAddDeviceClick = {
+                                navController.navigate("provisioning")
+                            }
+                        )
+                    }
+
+                    composable("provisioning") {
+                        val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        val scope = rememberCoroutineScope()
+                        
+                        com.joshua.chokepoint.ui.screens.ProvisioningScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onPairSuccess = {
+                                scope.launch {
+                                    // Auto-save the new device to the user's list
+                                    repo.addDevice("New Sensor")
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@MainActivity, "Device Provisioned & Saved!", Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack() // Go back to Devices
+                                    }
+                                }
                             }
                         )
                     }
