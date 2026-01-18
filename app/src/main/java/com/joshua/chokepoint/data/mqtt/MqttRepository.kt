@@ -30,17 +30,19 @@ class MqttRepository(
     fun connect() {
         if (mqttClient != null && mqttClient!!.isConnected) return
 
-        // TODO: Move these back to BuildConfig for production security!
-        // Using Puffin CloudAMQP as per user configuration
-        val serverUri = "tcp://puffin.rmq2.cloudamqp.com:1883" 
-        
         try {
             val clientId = MqttClient.generateClientId()
+            
+            // Use Secure Config from local.properties
+            val serverUri = BuildConfig.MQTT_BROKER_URL.ifEmpty { 
+                "tcp://puffin.rmq2.cloudamqp.com:1883" // Fallback only if local.properties failed, but should alert user
+            }
+            
             mqttClient = MqttAndroidClient(context, serverUri, clientId)
 
             val options = MqttConnectOptions().apply {
-                userName = "lztdkevt:lztdkevt"
-                password = "vG7j8gUsE9yG5Li7Mb8qaAcpExZLgdUS".toCharArray()
+                userName = BuildConfig.MQTT_USERNAME
+                password = BuildConfig.MQTT_PASSWORD.toCharArray()
                 isAutomaticReconnect = true
                 isCleanSession = true
             }

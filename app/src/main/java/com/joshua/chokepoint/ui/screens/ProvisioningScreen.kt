@@ -67,7 +67,7 @@ fun ProvisioningScreen(
                 style = MaterialTheme.typography.headlineSmall
             )
             Text(
-                text = "Please connect this phone to 'Chokepoint-Setup' Wi-Fi network before proceeding.",
+                text = "1. Connect phone to 'Chokepoint-Setup' Wi-Fi.\n2. Enter Home Wi-Fi details below.\n3. Tap 'Configure'.\n\nAlternatively, manually enter Device ID if known.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
@@ -92,7 +92,7 @@ fun ProvisioningScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Step 1: Send Credentials to ESP32
+            // Step 1: Send Credentials
             Button(
                 onClick = {
                     if (ssid.isBlank()) {
@@ -100,38 +100,33 @@ fun ProvisioningScreen(
                         return@Button
                     }
                     isSending = true
-                    statusMessage = "Sending credentials..."
+                    statusMessage = "Sending..."
                     
                     scope.launch {
                         val responseJson = sendCredentials(ssid, password)
-                        
                         if (responseJson != null) {
                             try {
                                 val json = org.json.JSONObject(responseJson)
                                 val deviceId = json.optString("device_id")
-                                
                                 if (deviceId.isNotEmpty()) {
                                     isSending = false
-                                    pendingDeviceId = deviceId // Store it to trigger Step 2
-                                    statusMessage = "Device Found! Please Restore Internet."
-                                    
+                                    pendingDeviceId = deviceId
+                                    statusMessage = "Device Configured! Reconnect Internet."
                                 } else {
                                     isSending = false
-                                    statusMessage = "Provisioned (Legacy). No ID."
-                                    onPairSuccess() 
+                                    statusMessage = "Success but no ID returned?"
                                 }
                             } catch (e: Exception) {
                                 isSending = false
-                                statusMessage = "Error parsing device response."
-                                e.printStackTrace()
+                                statusMessage = "Error parsing: ${responseJson.take(20)}"
                             }
                         } else {
                             isSending = false
-                            statusMessage = "Failed. Are you connected to Chokepoint-Setup?"
+                            statusMessage = "Failed. Connected to 'Chokepoint-Setup'?"
                         }
                     }
                 },
-                enabled = !isSending && pendingDeviceId.isEmpty(), // Disable if already found
+                enabled = !isSending && pendingDeviceId.isEmpty(),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
                 if (isSending) {
@@ -141,77 +136,82 @@ fun ProvisioningScreen(
                 }
             }
             
-            // Step 2: Claim Device (Only visible after Step 1 success)
+            // Step 2 or Manual Fallback
             if (pendingDeviceId.isNotEmpty()) {
-                 Spacer(modifier = Modifier.height(24.dp))
-                Card(
-                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-                     modifier = Modifier.fillMaxWidth()
-                ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("Step 2: Connect to Internet", style = MaterialTheme.typography.titleMedium)
-                        Text("Your phone is likely still on the Device Wi-Fi (No Internet).", style = MaterialTheme.typography.bodySmall)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("1. Disconnect from 'Chokepoint-Setup'.\n2. Connect to Mobile Data or Home Wi-Fi.\n3. Tap below to save the device.", style = MaterialTheme.typography.bodySmall)
-                        
+                        Text("Disconnect from Device Wi-Fi. Reconnect to Internet.", style = MaterialTheme.typography.bodySmall)
                         Spacer(modifier = Modifier.height(16.dp))
-                        
                         Button(
                             onClick = {
                                 val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
-                                statusMessage = "Claiming ${pendingDeviceId}..."
-                                
-                                repo.claimDevice(
-                                    deviceId = pendingDeviceId,
-                                    name = "New Sensor",
-                                    onSuccess = {
-                                        statusMessage = "Success! Device Claimed."
-                                        Toast.makeText(context, "Device Claimed! You are the Admin.", Toast.LENGTH_LONG).show()
-                                        onPairSuccess()
-                                    },
-                                    onError = { e ->
-                                        statusMessage = "Claim Failed: ${e.message}. Check Internet."
-                                    }
+                                repo.claimDevice(pendingDeviceId, "New Sensor", 
+                                    { Toast.makeText(context, "Success!", Toast.LENGTH_LONG).show(); onPairSuccess() },
+                                    { Toast.makeText(context, "Failed: ${it.message}", Toast.LENGTH_SHORT).show() }
                                 )
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) {
-                             Text("Finish Claiming")
-                        }
+                        ) { Text("Finish Claiming") }
                     }
                 }
-            } else if (statusMessage.isNotEmpty()) {
+            }
+            
+            // Manual Entry Fallback
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedTextField(
+                value = pendingDeviceId,
+                onValueChange = { pendingDeviceId = it },
+                label = { Text("Manual Device ID (Optional)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            // Helpful Button for 'Old People' / Non-techies
+            TextButton(
+                onClick = {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("http://192.168.4.1"))
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try { context.startActivity(intent) } catch(_: Exception) {}
+                },
+                modifier = Modifier.align(Alignment.End) 
+            ) {
+                Text("Don't know ID? Open Setup Page")
+            }
+
+            if (pendingDeviceId.isNotEmpty() && !statusMessage.contains("Configured")) {
+                 Button(
+                     onClick = {
+                          val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                          repo.claimDevice(pendingDeviceId, "Manual Sensor", 
+                              { Toast.makeText(context, "Success!", Toast.LENGTH_LONG).show(); onPairSuccess() },
+                              { Toast.makeText(context, "Failed: ${it.message}", Toast.LENGTH_SHORT).show() }
+                          )
+                     },
+                     modifier = Modifier.fillMaxWidth()
+                 ) { Text("Claim Manually") }
+            }
+
+            if (statusMessage.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(text = statusMessage, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text(text = statusMessage, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
 }
 
-// Simple suspend function to hit the ESP32 Web Server
-// Returns the response body (JSON) if success, or null if failed
 suspend fun sendCredentials(ssid: String, pass: String): String? {
     return withContext(Dispatchers.IO) {
         try {
             val url = URL("http://192.168.4.1/configure?ssid=$ssid&pass=$pass")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
-            
-            val responseCode = conn.responseCode
-            if (responseCode == 200) {
-                // Read response
-                val response = conn.inputStream.bufferedReader().use { it.readText() }
-                conn.disconnect()
-                return@withContext response
-            } else {
-                conn.disconnect()
-                return@withContext null
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return@withContext null
-        }
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            if (conn.responseCode == 200) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else null
+        } catch (e: Exception) { null }
     }
 }
+

@@ -16,3 +16,5 @@
 google-services.json
 scripts/
 !scripts/seed_marketplace.js
+firmware/secrets.py
+firmware/boot.py
