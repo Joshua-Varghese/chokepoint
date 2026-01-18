@@ -28,6 +28,7 @@ fun ProvisioningScreen(
     var password by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
+    var pendingDeviceId by remember { mutableStateOf("") }
     
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -91,6 +92,7 @@ fun ProvisioningScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Step 1: Send Credentials to ESP32
             Button(
                 onClick = {
                     if (ssid.isBlank()) {
@@ -109,27 +111,13 @@ fun ProvisioningScreen(
                                 val deviceId = json.optString("device_id")
                                 
                                 if (deviceId.isNotEmpty()) {
-                                    statusMessage = "Device Found! Claiming ownership..."
-                                    
-                                    val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
-                                    repo.claimDevice(
-                                        deviceId = deviceId,
-                                        name = "New Sensor", // Default name
-                                        onSuccess = {
-                                            isSending = false
-                                            statusMessage = "Success! Device Claimed."
-                                            Toast.makeText(context, "Device Claimed Successfully!", Toast.LENGTH_LONG).show()
-                                            onPairSuccess()
-                                        },
-                                        onError = { e ->
-                                            isSending = false
-                                            statusMessage = "Claim Failed: ${e.message}"
-                                        }
-                                    )
-                                } else {
-                                    // Fallback for old firmware without ID
                                     isSending = false
-                                    statusMessage = "Provisioned (Legacy). No ID returned."
+                                    pendingDeviceId = deviceId // Store it to trigger Step 2
+                                    statusMessage = "Device Found! Please Restore Internet."
+                                    
+                                } else {
+                                    isSending = false
+                                    statusMessage = "Provisioned (Legacy). No ID."
                                     onPairSuccess() 
                                 }
                             } catch (e: Exception) {
@@ -143,7 +131,7 @@ fun ProvisioningScreen(
                         }
                     }
                 },
-                enabled = !isSending,
+                enabled = !isSending && pendingDeviceId.isEmpty(), // Disable if already found
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) {
                 if (isSending) {
@@ -153,7 +141,46 @@ fun ProvisioningScreen(
                 }
             }
             
-            if (statusMessage.isNotEmpty()) {
+            // Step 2: Claim Device (Only visible after Step 1 success)
+            if (pendingDeviceId.isNotEmpty()) {
+                 Spacer(modifier = Modifier.height(24.dp))
+                Card(
+                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                     modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Step 2: Connect to Internet", style = MaterialTheme.typography.titleMedium)
+                        Text("Your phone is likely still on the Device Wi-Fi (No Internet).", style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("1. Disconnect from 'Chokepoint-Setup'.\n2. Connect to Mobile Data or Home Wi-Fi.\n3. Tap below to save the device.", style = MaterialTheme.typography.bodySmall)
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = {
+                                val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                                statusMessage = "Claiming ${pendingDeviceId}..."
+                                
+                                repo.claimDevice(
+                                    deviceId = pendingDeviceId,
+                                    name = "New Sensor",
+                                    onSuccess = {
+                                        statusMessage = "Success! Device Claimed."
+                                        Toast.makeText(context, "Device Claimed! You are the Admin.", Toast.LENGTH_LONG).show()
+                                        onPairSuccess()
+                                    },
+                                    onError = { e ->
+                                        statusMessage = "Claim Failed: ${e.message}. Check Internet."
+                                    }
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                             Text("Finish Claiming")
+                        }
+                    }
+                }
+            } else if (statusMessage.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = statusMessage, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
