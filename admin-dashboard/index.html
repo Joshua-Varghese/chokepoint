@@ -1,90 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus Admin</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Google Material Icons -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-    <!-- Firebase SDK (Modular) -->
-    <script type="module" src="firebase-config.js"></script>
-    <script type="module" src="app.js" defer></script>
-</head>
-<body>
-    <div id="app">
-        <!-- Auth View -->
-        <div id="auth-container" class="hidden">
-            <div class="login-card">
-                <div class="brand">
-                    <div class="logo"></div>
-                    <h1>Nexus</h1>
-                </div>
-                <p>Enter your credentials to access the admin panel.</p>
-                <form id="login-form">
-                    <div class="input-group">
-                        <span class="material-icons-round">email</span>
-                        <input type="email" id="email" placeholder="admin@nexus.com" required>
-                    </div>
-                    <div class="input-group">
-                        <span class="material-icons-round">lock</span>
-                        <input type="password" id="password" placeholder="••••••••" required>
-                    </div>
-                    <button type="submit" id="login-btn">Sign In</button>
-                    <p id="login-error" class="error-msg"></p>
-                </form>
-            </div>
-        </div>
-
-        <!-- Dashboard View -->
-        <div id="dashboard-container" class="hidden">
-            <aside class="sidebar">
-                <div class="sidebar-header">
-                    <div class="logo-small"></div>
-                    <h2>Nexus</h2>
-                </div>
-                <nav>
-                    <a href="#overview" class="nav-item active" data-route="overview">
-                        <span class="material-icons-round">dashboard</span>
-                        Overview
-                    </a>
-                    <a href="#products" class="nav-item" data-route="products">
-                        <span class="material-icons-round">inventory_2</span>
-                        Products
-                    </a>
-                    <a href="#orders" class="nav-item" data-route="orders">
-                        <span class="material-icons-round">shopping_bag</span>
-                        Orders
-                    </a>
-                    <a href="#customers" class="nav-item" data-route="customers">
-                        <span class="material-icons-round">people</span>
-                        Customers
-                    </a>
-                    <div class="spacer"></div>
-                    <button id="logout-btn" class="nav-item logout">
-                        <span class="material-icons-round">logout</span>
-                        Logout
-                    </button>
-                </nav>
-            </aside>
-
-            <main class="main-content">
-                <header class="top-bar">
-                    <div class="breadcrumbs">
-                        <span class="material-icons-round">home</span> / <span id="page-title">Overview</span>
-                    </div>
-                    <div class="user-profile">
-                        <span class="material-icons-round">notifications</span>
-                        <div class="avatar">A</div>
-                    </div>
-                </header>
-
-                <div id="content-area">
-                    <!-- Dynamic Content Loaded Here -->
-                </div>
-            </main>
-        </div>
-    </div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>admin-dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
