@@ -16,8 +16,16 @@ class FirestoreRepository {
     /**
      * Observes the last [limit] readings in real-time.
      */
-    fun observeRecentReadings(limit: Int = 20): Flow<List<SensorData>> = callbackFlow {
-        val listener = collection
+    /**
+     * Observes the last [limit] readings for a specific device.
+     */
+    fun observeRecentReadings(deviceId: String, limit: Int = 20): Flow<List<SensorData>> = callbackFlow {
+        if (deviceId.isEmpty()) {
+            close(IllegalArgumentException("DeviceId cannot be empty"))
+            return@callbackFlow
+        }
+
+        val listener = db.collection("devices").document(deviceId).collection("readings")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(limit.toLong())
             .addSnapshotListener { snapshot, e ->
@@ -30,13 +38,7 @@ class FirestoreRepository {
                 if (snapshot != null) {
                     val readings = snapshot.documents.mapNotNull { doc ->
                         try {
-                            // Map manually or use toObject if SensorData matches exactly
-                            val co2 = doc.getDouble("co2") ?: 0.0
-                            val nh3 = doc.getDouble("nh3") ?: 0.0
-                            val smoke = doc.getDouble("smoke") ?: 0.0
-                            val timestamp = doc.getTimestamp("timestamp")?.toDate()?.time ?: 0L
-                            
-                            SensorData(co2, nh3, smoke, timestamp)
+                            doc.toObject(SensorData::class.java)
                         } catch (e: Exception) {
                             Log.e("Firestore", "Error parsing doc ${doc.id}", e)
                             null
@@ -48,10 +50,19 @@ class FirestoreRepository {
 
         awaitClose { listener.remove() }
     }
+
     fun saveSensorData(data: SensorData) {
-        collection.add(data)
+        if (data.deviceId.isEmpty()) {
+            Log.w("Firestore", "Skipping save: No Device ID")
+            return
+        }
+
+        db.collection("devices")
+            .document(data.deviceId)
+            .collection("readings")
+            .add(data)
             .addOnSuccessListener {
-                Log.d("Firestore", "DocumentSnapshot added with ID: ${it.id}")
+                Log.d("Firestore", "Reading saved to devices/${data.deviceId}/readings/${it.id}")
             }
             .addOnFailureListener { e ->
                 Log.w("Firestore", "Error adding document", e)

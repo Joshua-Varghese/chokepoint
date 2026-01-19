@@ -21,18 +21,22 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(
+    deviceId: String,
     repository: FirestoreRepository,
     onBackClick: () -> Unit
 ) {
     val readings = remember { mutableStateListOf<SensorData>() }
     
     // Simple state flow observation
-    LaunchedEffect(Unit) {
-        repository.observeRecentReadings(50).collect { list ->
-            readings.clear()
-            readings.addAll(list)
+    LaunchedEffect(deviceId) {
+        if(deviceId.isNotEmpty()) {
+            repository.observeRecentReadings(deviceId, 50).collect { list ->
+                readings.clear()
+                readings.addAll(list)
+            }
         }
     }
 

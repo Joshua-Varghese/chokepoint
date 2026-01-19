@@ -192,7 +192,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onHistoryClick = {
-                                navController.navigate("analytics")
+                                val id = sensorData.deviceId.ifEmpty { "unknown" }
+                                navController.navigate("analytics/$id")
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
@@ -200,9 +201,11 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    composable("analytics") {
+                    composable("analytics/{deviceId}") { backStackEntry ->
+                        val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
                         val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
                         com.joshua.chokepoint.ui.screens.AnalyticsScreen(
+                            deviceId = deviceId,
                             repository = firestoreRepository,
                             onBackClick = {
                                 navController.popBackStack()

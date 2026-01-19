@@ -112,14 +112,15 @@ class MqttRepository(
     private fun parsePayload(jsonString: String) {
         try {
             val json = JSONObject(jsonString)
+            val deviceId = json.optString("device_id", "unknown_device")
             val co2 = json.optDouble("co2", 0.0)
             val nh3 = json.optDouble("nh3", 0.0)
             val smoke = json.optDouble("smoke", 0.0)
             
-            val data = SensorData(co2, nh3, smoke)
+            val data = SensorData(co2, nh3, smoke, System.currentTimeMillis(), deviceId)
             _sensorData.value = data
             
-            // Save to Firestore for history
+            // Save to Firestore history (sub-collection)
             firestoreRepository.saveSensorData(data)
             
         } catch (e: Exception) {

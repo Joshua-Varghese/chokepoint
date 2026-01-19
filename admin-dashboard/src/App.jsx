@@ -6,6 +6,8 @@ import Login from './pages/Login';
 import DashboardLayout from './components/DashboardLayout';
 import Overview from './pages/Overview';
 import Products from './pages/Products';
+import Devices from './pages/Devices';
+import DeviceDetail from './pages/DeviceDetail';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -30,7 +32,8 @@ function App() {
           <Route index element={<Overview />} />
           <Route path="products" element={<Products />} />
           <Route path="orders" element={<h2>Orders (Coming Soon)</h2>} />
-          <Route path="devices" element={<h2>Devices (Coming Soon)</h2>} />
+          <Route path="devices" element={<Devices />} />
+          <Route path="devices/:id" element={<DeviceDetail />} />
           <Route path="customers" element={<h2>Customers (Coming Soon)</h2>} />
         </Route>
       </Routes>

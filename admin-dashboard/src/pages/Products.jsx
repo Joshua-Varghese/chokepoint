@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 
 export default function Products() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState(null);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -29,25 +30,64 @@ export default function Products() {
         fetchData();
     }, []);
 
+    const handleEdit = (product) => {
+        setFormData({
+            name: product.name,
+            price: product.price,
+            stock: product.stock,
+            category: product.category
+        });
+        setEditingId(product.id);
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this product?")) return;
+        try {
+            await deleteDoc(doc(db, 'products', id));
+            fetchData();
+        } catch (error) {
+            console.error("Error deleting product:", error);
+            alert("Failed to delete product");
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await addDoc(collection(db, 'products'), {
-                name: formData.name,
-                price: parseFloat(formData.price),
-                stock: parseInt(formData.stock),
-                category: formData.category,
-                createdAt: serverTimestamp(),
-                imageUrl: 'https://via.placeholder.com/150'
-            });
-            setIsModalOpen(false);
-            setFormData({ name: '', price: '', stock: '', category: 'monitors' });
-            fetchData(); // Refresh
-            alert("Product Added successfully");
+            if (editingId) {
+                // Update
+                await updateDoc(doc(db, 'products', editingId), {
+                    name: formData.name,
+                    price: parseFloat(formData.price),
+                    stock: parseInt(formData.stock),
+                    category: formData.category
+                });
+                alert("Product Updated!");
+            } else {
+                // Create
+                await addDoc(collection(db, 'products'), {
+                    name: formData.name,
+                    price: parseFloat(formData.price),
+                    stock: parseInt(formData.stock),
+                    category: formData.category,
+                    createdAt: serverTimestamp(),
+                    imageUrl: 'https://via.placeholder.com/150'
+                });
+                alert("Product Added!");
+            }
+            closeModal();
+            fetchData();
         } catch (error) {
-            console.error("Error adding product:", error);
-            alert("Failed to add product");
+            console.error("Error saving product:", error);
+            alert("Failed to save product");
         }
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingId(null);
+        setFormData({ name: '', price: '', stock: '', category: 'monitors' });
     };
 
     return (
@@ -67,17 +107,26 @@ export default function Products() {
                             <th>Price</th>
                             <th>Stock</th>
                             <th>Category</th>
+                            <th style={{ textAlign: 'right' }}>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="4" style={{ textAlign: 'center' }}>Loading...</td></tr>
+                            <tr><td colSpan="5" style={{ textAlign: 'center' }}>Loading...</td></tr>
                         ) : products.map(p => (
                             <tr key={p.id}>
                                 <td>{p.name}</td>
                                 <td>₹{p.price}</td>
                                 <td>{p.stock !== undefined ? p.stock : 'N/A'}</td>
                                 <td>{p.category}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                    <button onClick={() => handleEdit(p)} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem' }}>
+                                        <Pencil size={16} />
+                                    </button>
+                                    <button onClick={() => handleDelete(p.id)} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', color: 'var(--danger)' }}>
+                                        <Trash2 size={16} />
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -93,8 +142,8 @@ export default function Products() {
                 }}>
                     <div className="card" style={{ width: '100%', maxWidth: '400px', background: '#fff' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                            <h2 style={{ fontSize: '1.25rem', fontWeight: '600' }}>Add New Product</h2>
-                            <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: '600' }}>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
+                            <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                                 <X size={20} />
                             </button>
                         </div>
@@ -122,7 +171,9 @@ export default function Products() {
                                     <option value="plants">Plants</option>
                                 </select>
                             </div>
-                            <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem', background: '#000' }}>Save Product</button>
+                            <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem', background: '#000' }}>
+                                {editingId ? 'Update Product' : 'Save Product'}
+                            </button>
                         </form>
                     </div>
                 </div>
