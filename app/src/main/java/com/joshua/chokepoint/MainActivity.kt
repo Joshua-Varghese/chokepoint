@@ -197,8 +197,23 @@ class MainActivity : ComponentActivity() {
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
+                            },
+                            onAddDeviceClick = {
+                                navController.navigate("provisioning")
                             }
                         )
+                    }
+
+                    composable("provisioning") {
+                         com.joshua.chokepoint.ui.screens.ProvisioningScreen(
+                             onBackClick = {
+                                 navController.popBackStack()
+                             },
+                             onProvisionComplete = {
+                                 // Optionally navigate somewhere or just pop back
+                                 navController.popBackStack()
+                             }
+                         )
                     }
 
                     composable("analytics/{deviceId}") { backStackEntry ->

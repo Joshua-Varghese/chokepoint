@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -28,7 +29,8 @@ fun DashboardScreen(
     isConnected: Boolean,
     onLogoutClick: () -> Unit,
     onHistoryClick: () -> Unit,
-    onMarketplaceClick: () -> Unit
+    onMarketplaceClick: () -> Unit,
+    onAddDeviceClick: () -> Unit
 ) {
     Scaffold(
         bottomBar = {
@@ -59,6 +61,17 @@ fun DashboardScreen(
                     selected = false,
                     onClick = { onLogoutClick() } 
                 )
+            }
+                )
+            }
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { /* TODO: onAddDeviceClick() */ onAddDeviceClick() },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(Icons.Filled.Add, "Add Device")
             }
         }
     ) { innerPadding ->

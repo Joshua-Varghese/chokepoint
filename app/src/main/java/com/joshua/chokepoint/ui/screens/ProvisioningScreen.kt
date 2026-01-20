@@ -21,7 +21,8 @@ import com.joshua.chokepoint.ui.theme.TextLight
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProvisioningScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onProvisionComplete: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -75,13 +76,23 @@ fun ProvisioningScreen(
 
             Button(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://192.168.4.1"))
-                    context.startActivity(intent)
+                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://192.168.4.1"))
+                     context.startActivity(intent)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Configure Device (Open Browser)")
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = onProvisionComplete,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+            ) {
+                Text("I'm Done")
             }
         }
     }

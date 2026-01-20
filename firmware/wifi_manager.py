@@ -74,35 +74,79 @@ class WifiManager:
                         # We expect simple raw JSON or form data
                         pass
                 
-                # Parse GET request manually for demo
-                # Request: GET /save?ssid=MyWiFi&password=123 HTTP/1.1
-                if b'/save?' in line:
+                # Capture GET request line
+                request_line = line.decode()
+                addr = addr[0]
+                
+                # Consume remaining headers
+                while True:
+                    h = cl_file.readline()
+                    if not h or h == b'\r\n':
+                        break
+
+                print("Request:", request_line)
+                
+                # Parsing Logic
+                if 'GET /save?' in request_line:
                     try:
-                        path = line.split(b' ')[1]
-                        query = path.split(b'?')[1].decode()
-                        params = dict(qs.split('=') for qs in query.split('&'))
-                        ssid = params.get('ssid', '').replace('+', ' ')
-                        pwd = params.get('password', '').replace('+', ' ')
+                        path = request_line.split(' ')[1]
+                        query = path.split('?')[1]
+                        # Safe parameter parsing
+                        params = {}
+                        for pair in query.split('&'):
+                            if '=' in pair:
+                                k, v = pair.split('=', 1)
+                                params[k] = v.replace('+', ' ').replace('%20', ' ')
+                        
+                        ssid = params.get('ssid', '').strip()
+                        pwd = params.get('password', '').strip()
                         
                         if ssid:
                             self.save_config(ssid, pwd)
-                            cl.send('HTTP/1.1 200 OK\r\n\r\nSaved. Restarting...')
+                            # Success Response
+                            cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
+                            cl.send('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>')
+                            cl.send('<body style="font-family:sans-serif; text-align:center; padding:20px;">')
+                            cl.send('<h1>Saved!</h1><p>Restarting...</p>')
+                            cl.send('</body></html>')
+                            cl.send('</body></html>')
+                            print("Config Saved. Rebooting in 3 seconds...")
+                            time.sleep(3)
                             cl.close()
-                            time.sleep(1)
                             machine.reset()
+                        else:
+                            print("Ignored empty SSID")
                     except Exception as e:
-                        print("Parse/Save Error", e)
+                        print("Parse Error", e)
 
-                # Send Form
+                # Serve Form (Mobile Friendly)
                 response = """HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n
-                <!DOCTYPE html><html><body>
-                <h1>Setup WiFi</h1>
-                <form action="/save" method="get">
-                    SSID: <input name="ssid"><br>
-                    Pass: <input name="password"><br>
-                    <input type="submit" value="Save">
-                </form>
-                </body></html>
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f4f5; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 320px; }
+                        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; text-align: center; color: #18181b; }
+                        input { width: 100%; padding: 12px; margin-bottom: 1rem; border: 1px solid #e4e4e7; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+                        button { width: 100%; padding: 12px; background: #000; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+                        label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: #52525b; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>Setup WiFi</h1>
+                        <form action="/save" method="get">
+                            <label>Network Name</label>
+                            <input name="ssid" placeholder="MyWiFi" required>
+                            <label>Password</label>
+                            <input name="password" type="password" placeholder="********">
+                            <button type="submit">Connect</button>
+                        </form>
+                    </div>
+                </body>
+                </html>
                 """
                 cl.send(response)
                 
