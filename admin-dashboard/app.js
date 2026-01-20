@@ -52,7 +52,7 @@ loginForm.addEventListener('submit', async (e) => {
         await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
         // --- MOCK LOGIN BYPASS (For testing without live Firebase Config) ---
-        if (email === 'admin@nexus.com' && password === 'admin123') {
+        if (email === 'admin@chokepoint.com' && password === 'admin123') {
             console.warn("Using Mock Login Bypass");
             state.user = { email: email, displayName: 'Mock Admin' };
             showDashboard();

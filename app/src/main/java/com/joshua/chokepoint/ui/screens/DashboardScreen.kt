@@ -26,9 +26,11 @@ import androidx.compose.ui.unit.sp
 fun DashboardScreen(
     sensorData: com.joshua.chokepoint.data.model.SensorData,
     isConnected: Boolean,
+    savedDevices: List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>, // Add this
     onLogoutClick: () -> Unit,
     onHistoryClick: () -> Unit,
-    onMarketplaceClick: () -> Unit
+    onMarketplaceClick: () -> Unit,
+    onDevicesClick: () -> Unit
 ) {
     Scaffold(
         bottomBar = {
@@ -42,10 +44,10 @@ fun DashboardScreen(
                     onClick = { }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History") },
-                    label = { Text("History") },
+                    icon = { Icon(Icons.Filled.Sensors, contentDescription = "Devices") },
+                    label = { Text("Devices") },
                     selected = false,
-                    onClick = { onHistoryClick() }
+                    onClick = { onDevicesClick() }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.ShoppingBag, contentDescription = "Market") },
@@ -119,12 +121,13 @@ fun DashboardScreen(
                             letterSpacing = 2.sp
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        // Calculate simplified AQI (just using CO2 for demo scaling)
-                        val aqi = (sensorData.co2 / 10).toInt().coerceIn(0, 500)
+                        // Show actual Air Quality from Sensor
+                        val quality = sensorData.airQuality.ifEmpty { "Unknown" }
+                        
                         Text(
-                            text = "$aqi",
-                            style = MaterialTheme.typography.displayLarge,
-                            fontSize = 80.sp,
+                            text = quality,
+                            style = MaterialTheme.typography.displayMedium, // Smaller font for text
+                            fontSize = 40.sp,
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.Bold
                         )
@@ -140,18 +143,23 @@ fun DashboardScreen(
                                 Surface(
                                     modifier = Modifier.size(8.dp),
                                     shape = CircleShape,
-                                    color = Color.White
+                                    color = if(quality == "Hazardous") Color.Red else Color.Green
                                 ) {}
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (aqi < 100) "Good" else "Moderate",
+                                    text = "Raw: ${sensorData.gasRaw}",
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
                             }
                         }
                     }
+                    // Try to find a friendly name for this deviceId
+                    val friendlyName = savedDevices.find { it.id == sensorData.deviceId }?.name 
+                        ?: savedDevices.firstOrNull()?.name // Fallback: Show first device name for demo
+                        ?: sensorData.deviceId.ifEmpty { "Unknown Device" }
+
                     Text(
-                        text = "Living Room • Last updated just now",
+                        text = "$friendlyName • Live",
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 24.dp),
@@ -175,18 +183,18 @@ fun DashboardScreen(
             // Grid of Cards
             Row(modifier = Modifier.fillMaxWidth()) {
                 DetailCard(
-                    title = "CO2",
-                    value = "${sensorData.co2.toInt()}",
-                    unit = "ppm",
+                    title = "Gas Level",
+                    value = "${sensorData.gasRaw}",
+                    unit = "",
                     modifier = Modifier
                         .weight(1f)
                         .height(160.dp)
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 DetailCard(
-                    title = "NH3",
-                    value = String.format("%.2f", sensorData.nh3),
-                    unit = "ppm",
+                    title = "Quality",
+                    value = sensorData.airQuality.take(4), // Shorten if needed
+                    unit = "",
                     modifier = Modifier
                         .weight(1f)
                         .height(160.dp)
@@ -195,9 +203,9 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 DetailCard(
-                    title = "Smoke",
-                    value = "${sensorData.smoke.toInt()}",
-                    unit = "ug/m3",
+                    title = "CO2 (Est)",
+                    value = "${(sensorData.gasRaw / 10)}", // Dummy estimation
+                    unit = "ppm",
                     modifier = Modifier
                         .weight(1f)
                         .height(160.dp)
@@ -205,7 +213,7 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                  DetailCard(
                     title = "Temp",
-                    value = "24",
+                    value = "0",
                     unit = "°C",
                     isPlaceholder = true,
                     modifier = Modifier
@@ -250,12 +258,13 @@ fun DetailCard(
                 Text(
                     text = if(isPlaceholder) "$value$unit" else "$value $unit", 
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black // Fix: Ensure visibility on light card
                 )
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
+                    color = Color.DarkGray // Fix: Better contrast
                 )
             }
         }

@@ -30,19 +30,17 @@ class MqttRepository(
     fun connect() {
         if (mqttClient != null && mqttClient!!.isConnected) return
 
-        val serverUri = BuildConfig.MQTT_BROKER_URL
-        if (serverUri.isEmpty() || serverUri == "null") {
-            Log.e("MQTT", "Broker URL is missing in BuildConfig")
-            return
-        }
-
+        // TODO: Move these back to BuildConfig for production security!
+        // Using Puffin CloudAMQP as per user configuration
+        val serverUri = "tcp://puffin.rmq2.cloudamqp.com:1883" 
+        
         try {
             val clientId = MqttClient.generateClientId()
             mqttClient = MqttAndroidClient(context, serverUri, clientId)
 
             val options = MqttConnectOptions().apply {
-                userName = BuildConfig.MQTT_USERNAME
-                password = BuildConfig.MQTT_PASSWORD.toCharArray()
+                userName = "lztdkevt:lztdkevt"
+                password = "vG7j8gUsE9yG5Li7Mb8qaAcpExZLgdUS".toCharArray()
                 isAutomaticReconnect = true
                 isCleanSession = true
             }
@@ -95,13 +93,15 @@ class MqttRepository(
 
     private fun subscribeToTopics() {
         try {
-            mqttClient?.subscribe("sensors/data", 0, null, object : IMqttActionListener {
+            // Subscribe to all devices' data
+            val topic = "chokepoint/devices/+/data"
+            mqttClient?.subscribe(topic, 0, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.d("MQTT", "Subscribed to sensors/data")
+                    Log.d("MQTT", "Subscribed to $topic")
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e("MQTT", "Failed to subscribe", exception)
+                    Log.e("MQTT", "Failed to subscribe to $topic", exception)
                 }
             })
         } catch (e: MqttException) {
@@ -112,11 +112,22 @@ class MqttRepository(
     private fun parsePayload(jsonString: String) {
         try {
             val json = JSONObject(jsonString)
+            
+            // Extract Firmware Data
+            val deviceId = json.optString("device_id", "unknown")
+            val gasRaw = json.optInt("gas_raw", 0)
+            val airQuality = json.optString("air_quality", "Unknown")
+            val timestamp = json.optLong("timestamp", System.currentTimeMillis())
+
+            // Legacy support
             val co2 = json.optDouble("co2", 0.0)
             val nh3 = json.optDouble("nh3", 0.0)
             val smoke = json.optDouble("smoke", 0.0)
             
-            val data = SensorData(co2, nh3, smoke)
+            val data = SensorData(
+                co2 = co2, nh3 = nh3, smoke = smoke,
+                deviceId = deviceId, gasRaw = gasRaw, airQuality = airQuality, timestamp = timestamp
+            )
             _sensorData.value = data
             
             // Save to Firestore for history
