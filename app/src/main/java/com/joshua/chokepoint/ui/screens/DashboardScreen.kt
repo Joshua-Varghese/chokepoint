@@ -62,8 +62,6 @@ fun DashboardScreen(
                     onClick = { onLogoutClick() } 
                 )
             }
-                )
-            }
         },
         floatingActionButton = {
             FloatingActionButton(

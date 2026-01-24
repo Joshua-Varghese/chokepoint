@@ -1,125 +1,110 @@
-from wifi_manager import WifiManager
-from mq135 import MQ135
-from file_mgr import FileManager
-import config
-import machine
 import time
+import machine
+import ubinascii
 import json
+import config
+from wifi_manager import WifiManager
 from umqtt.simple import MQTTClient
+try:
+    import mq135
+except ImportError:
+    mq135 = None
 
-# --- Setup ---
+# --- Global State ---
+device_id = ubinascii.hexlify(machine.unique_id()).decode()
 wm = WifiManager()
-device_id = wm.get_device_id()
-mq = MQ135(34)
-fm = FileManager()
-
 mqtt = None
 
-
+# --- Sensor Mock if mq135 missing ---
+if mq135:
+    mq = mq135.MQ135(34) # Pin 34
+else:
+    class MockSensor:
+        def get_readings(self):
+            return {"co2": 400.0, "nh3": 0.05, "smoke": 10.0}
+    mq = MockSensor()
 
 def mqtt_callback(topic, msg):
-    print("MQTT MSG:", topic, msg)
+    print("MSG:", topic, msg)
     try:
-        payload = json.loads(msg)
-        if "cmd" in payload:
-            cmd = payload["cmd"]
-            res_topic = f"devices/{device_id}/res"
-            
-            if cmd == "ls":
-                files = fm.list_files()
-                mqtt.publish(res_topic, json.dumps({"cmd": "ls", "files": files}))
-                
-            elif cmd == "read":
-                path = payload.get("path")
-                content = fm.read_file(path)
-                # Chunking large files might be needed later, for now simple send
-                mqtt.publish(res_topic, json.dumps({"cmd": "read", "path": path, "content": content}))
-                
-            elif cmd == "write":
-                path = payload.get("path")
-                content = payload.get("content")
-                status = fm.write_file(path, content)
-                mqtt.publish(res_topic, json.dumps({"cmd": "write", "path": path, "status": status}))
-                print(f"File {path} written. Status: {status}")
-                # Auto-restart if main.py is updated? 
-                if path == "main.py":
-                    print("Main updated. Rebooting...")
-                    time.sleep(1)
-                    machine.reset()
-
-            elif cmd == "rm":
-                path = payload.get("path")
-                status = fm.delete_file(path)
-                mqtt.publish(res_topic, json.dumps({"cmd": "rm", "path": path, "status": status}))
-
-            elif cmd == "restart":
-                machine.reset()
-                
-    except Exception as e:
-        print("MQTT Callback Error:", e)
+        cmd = json.loads(msg)
+        if cmd.get('cmd') == 'reset':
+            machine.reset()
+        elif cmd.get('cmd') == 'ping':
+            mqtt.publish(f"devices/{device_id}/status", "pong")
+    except:
+        pass
 
 def main():
     global mqtt
     print("Booting Chokepoint Firmware...")
     print("Device ID:", device_id)
     
-    # 1. Try to load config
+    # 1. Try to load and connect WiFi
     ssid, password = wm.load_config()
-    
     connected = False
+    
     if ssid:
-        print(f"Found Config for {ssid}. Connecting...")
+        print(f"Found Config for {ssid}")
         connected = wm.connect(ssid, password)
     
-    # 2. If no config or connection failed -> AP Mode
+    # 2. If Failed -> Provisioning Mode
     if not connected:
-        print("WiFi Connection Failed or No Config. Starting Provisioning Mode.")
+        print("WiFi Connection Failed or Config Missing.")
+        # Only start AP if we really can't connect.
+        # Check if we should retry or go straight to AP. 
+        # For now, go to AP.
         wm.run_provisioning_server()
-        # run_provisioning_server loops forever until reboot
-        return
+        return # run_provisioning_server loops forever/resets
 
-    # 3. If connected, proceed to MQTT
-    if connected:
-        print("WiFi Connected.")
+    # 3. MQTT Connection
+    print("WiFi Connected. Connecting to RabbitMQ...")
+    try:
+        mqtt = MQTTClient(
+            client_id=device_id,
+            server=config.MQTT_BROKER,
+            port=config.MQTT_PORT,
+            user=config.MQTT_USER,
+            password=config.MQTT_PASS,
+            keepalive=60
+        )
+        mqtt.set_callback(mqtt_callback)
+        mqtt.connect()
+        print("MQTT Connected!")
         
-        try:
-            mqtt = MQTTClient(
-                client_id=device_id,
-                server=config.MQTT_BROKER,
-                port=config.MQTT_PORT,
-                user=config.MQTT_USER,
-                password=config.MQTT_PASS
-            )
-            mqtt.set_callback(mqtt_callback)
-            mqtt.connect()
-            print("MQTT Connected.")
-            
-            # Subscribe to CMD topic
-            cmd_topic = f"devices/{device_id}/cmd"
-            mqtt.subscribe(cmd_topic)
-            print("Listening on:", cmd_topic)
-            
-            while True:  # Main Loop
-                try:
-                    mqtt.check_msg()
-                    
-                    # Periodic Sensor Data
-                    data = mq.get_readings()
-                    data['device_id'] = device_id
-                    mqtt.publish(config.MQTT_TOPIC_DATA, json.dumps(data))
-                    
-                    time.sleep(2) # Faster loop for responsiveness
-                except Exception as e:
-                    print("Loop Error:", e)
+        # Subscribe
+        cmd_topic = f"devices/{device_id}/cmd"
+        mqtt.subscribe(cmd_topic)
+        
+        # Main Loop
+        while True:
+            try:
+                mqtt.check_msg()
+                
+                # Read Sensor
+                data = mq.get_readings() # Returns dict
+                data['device_id'] = device_id
+                data['timestamp'] = int(time.time())
+                
+                # Publish
+                payload = json.dumps(data)
+                mqtt.publish(config.MQTT_TOPIC_DATA, payload)
+                print("Pub:", payload)
+                
+                time.sleep(2)
+                
+            except OSError as e:
+                print("MQTT Error:", e)
+                # Try reconnect
+                try: 
+                    mqtt.connect() 
+                    mqtt.subscribe(cmd_topic)
+                except: 
                     time.sleep(5)
-                    try: mqtt.connect()
-                    except: pass
                     
-        except Exception as e:
-            print("MQTT Connection Failed:", e)
-            time.sleep(10)
-            machine.reset()
-    else:
+    except Exception as e:
+        print("Fatal Error:", e)
+        time.sleep(10)
         machine.reset()
 
 if __name__ == "__main__":

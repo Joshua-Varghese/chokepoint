@@ -122,16 +122,16 @@ class MainActivity : ComponentActivity() {
                     composable("signup") {
                         SignUpScreen(
                             isLoading = isLoading,
-                            onSignUpClick = { email, password ->
+                            onSignUpClick = { email, password, name ->
                                 isLoading = true
-                                signUpWithEmail(email, password) { success, message ->
-                                    isLoading = false
+                                signUpWithEmail(email, password, name) { success, message ->
                                     if (success) {
-                                        Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
-                                        navController.navigate("dashboard") {
-                                            popUpTo("landing") { inclusive = true }
-                                        }
+                                         Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
+                                         navController.navigate("dashboard") {
+                                             popUpTo("landing") { inclusive = true }
+                                         }
                                     } else {
+                                        isLoading = false
                                         Toast.makeText(this@MainActivity, "Sign Up Failed: $message", Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -334,11 +334,21 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    private fun signUpWithEmail(email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+    private fun signUpWithEmail(email: String, pass: String, name: String, onResult: (Boolean, String?) -> Unit) {
         auth.createUserWithEmailAndPassword(email, pass)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    onResult(true, null)
+                    // Create Firestore Profile
+                    val uid = task.result.user?.uid ?: ""
+                    val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                    repo.createUserProfile(uid, email, name, 
+                        onSuccess = {
+                             onResult(true, null)
+                        },
+                        onFailure = { e ->
+                             onResult(false, "Profile Sync Failed: ${e.localizedMessage}")
+                        }
+                    )
                 } else {
                     Log.w("Auth", "createUserWithEmail:failure", task.exception)
                     onResult(false, task.exception?.localizedMessage)

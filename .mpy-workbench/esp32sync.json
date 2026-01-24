@@ -1,0 +1,476 @@
+{
+  "version": 1,
+  "syncId": "c62c4a9e-0e38-419f-9582-b32aa8ca5d9c",
+  "root": "c:\\Users\\joshu\\Desktop\\chokepoint",
+  "generatedAt": 1769281604188,
+  "files": {
+    ".firebaserc": {
+      "size": 65,
+      "mtime": 1767679535406
+    },
+    ".github/workflows/.firebase.yml.un~": {
+      "size": 11242,
+      "mtime": 1767679535408
+    },
+    ".github/workflows/firebase.yml": {
+      "size": 510,
+      "mtime": 1767679535408
+    },
+    ".github/workflows/firebase.yml~": {
+      "size": 471,
+      "mtime": 1767679535409
+    },
+    ".gitignore": {
+      "size": 294,
+      "mtime": 1768934788223
+    },
+    ".gradle/8.13/checksums/checksums.lock": {
+      "size": 17,
+      "mtime": 1769281201077
+    },
+    ".gradle/8.13/checksums/md5-checksums.bin": {
+      "size": 33297,
+      "mtime": 1767799295081
+    },
+    ".gradle/8.13/checksums/sha1-checksums.bin": {
+      "size": 78647,
+      "mtime": 1767799413816
+    },
+    ".gradle/8.13/executionHistory/executionHistory.bin": {
+      "size": 5421267,
+      "mtime": 1769281188590
+    },
+    ".gradle/8.13/executionHistory/executionHistory.lock": {
+      "size": 17,
+      "mtime": 1769281201001
+    },
+    ".gradle/8.13/fileChanges/last-build.bin": {
+      "size": 1,
+      "mtime": 1769281200996
+    },
+    ".gradle/8.13/fileHashes/fileHashes.bin": {
+      "size": 236119,
+      "mtime": 1769281188626
+    },
+    ".gradle/8.13/fileHashes/fileHashes.lock": {
+      "size": 17,
+      "mtime": 1769281201077
+    },
+    ".gradle/8.13/fileHashes/resourceHashesCache.bin": {
+      "size": 76911,
+      "mtime": 1769281188641
+    },
+    ".gradle/8.13/gc.properties": {
+      "size": 0,
+      "mtime": 1769279600449
+    },
+    ".gradle/buildOutputCleanup/buildOutputCleanup.lock": {
+      "size": 17,
+      "mtime": 1769281201001
+    },
+    ".gradle/buildOutputCleanup/cache.properties": {
+      "size": 52,
+      "mtime": 1766378152097
+    },
+    ".gradle/buildOutputCleanup/outputFiles.bin": {
+      "size": 24221,
+      "mtime": 1769281200751
+    },
+    ".gradle/config.properties": {
+      "size": 91,
+      "mtime": 1766378096083
+    },
+    ".gradle/file-system.probe": {
+      "size": 8,
+      "mtime": 1769281183898
+    },
+    ".gradle/vcs-1/gc.properties": {
+      "size": 0,
+      "mtime": 1769279600396
+    },
+    "admin-dashboard/.gitignore": {
+      "size": 277,
+      "mtime": 1768934651763
+    },
+    "admin-dashboard/eslint.config.js": {
+      "size": 787,
+      "mtime": 1768934651764
+    },
+    "admin-dashboard/index.html": {
+      "size": 377,
+      "mtime": 1768934651764
+    },
+    "admin-dashboard/package-lock.json": {
+      "size": 171140,
+      "mtime": 1768934651869
+    },
+    "admin-dashboard/package.json": {
+      "size": 785,
+      "mtime": 1768934651869
+    },
+    "admin-dashboard/public/vite.svg": {
+      "size": 1497,
+      "mtime": 1768934651869
+    },
+    "admin-dashboard/README.md": {
+      "size": 1173,
+      "mtime": 1768934651763
+    },
+    "admin-dashboard/src/App.css": {
+      "size": 648,
+      "mtime": 1768934651875
+    },
+    "admin-dashboard/src/App.jsx": {
+      "size": 1654,
+      "mtime": 1769280566165
+    },
+    "admin-dashboard/src/assets/react.svg": {
+      "size": 4126,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/components/DashboardLayout.jsx": {
+      "size": 2605,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/firebase-config.js": {
+      "size": 599,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/index.css": {
+      "size": 2410,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/main.jsx": {
+      "size": 239,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/pages/Customers.jsx": {
+      "size": 3528,
+      "mtime": 1769280562010
+    },
+    "admin-dashboard/src/pages/DeviceDetail.jsx": {
+      "size": 9425,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/pages/Devices.jsx": {
+      "size": 2676,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/pages/Login.jsx": {
+      "size": 3189,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/pages/Overview.jsx": {
+      "size": 3409,
+      "mtime": 1768934651876
+    },
+    "admin-dashboard/src/pages/Products.jsx": {
+      "size": 11243,
+      "mtime": 1769280422179
+    },
+    "admin-dashboard/vite.config.js": {
+      "size": 168,
+      "mtime": 1768934651883
+    },
+    "app/.gitignore": {
+      "size": 38,
+      "mtime": 1767679535412
+    },
+    "app/build.gradle.kts": {
+      "size": 3364,
+      "mtime": 1767799257616
+    },
+    "app/google-services.json": {
+      "size": 1329,
+      "mtime": 1767285237751
+    },
+    "app/proguard-rules.pro": {
+      "size": 770,
+      "mtime": 1766378069313
+    },
+    "app/src/androidTest/java/com/joshua/chokepoint/ExampleInstrumentedTest.kt": {
+      "size": 692,
+      "mtime": 1766378069313
+    },
+    "app/src/main/AndroidManifest.xml": {
+      "size": 1400,
+      "mtime": 1768934788339
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/firestore/FirestoreRepository.kt": {
+      "size": 3218,
+      "mtime": 1769280640667
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/model/CartItem.kt": {
+      "size": 219,
+      "mtime": 1767798828881
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/model/Product.kt": {
+      "size": 297,
+      "mtime": 1767857640776
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/model/SensorData.kt": {
+      "size": 243,
+      "mtime": 1768934788339
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/mqtt/MqttRepository.kt": {
+      "size": 5163,
+      "mtime": 1768934788343
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/repository/CartRepository.kt": {
+      "size": 3118,
+      "mtime": 1767800747991
+    },
+    "app/src/main/java/com/joshua/chokepoint/data/repository/MarketplaceRepository.kt": {
+      "size": 1658,
+      "mtime": 1767799170266
+    },
+    "app/src/main/java/com/joshua/chokepoint/MainActivity.kt": {
+      "size": 17658,
+      "mtime": 1769280656012
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/AnalyticsScreen.kt": {
+      "size": 4009,
+      "mtime": 1768934788343
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/CartScreen.kt": {
+      "size": 8593,
+      "mtime": 1767800769699
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/DashboardScreen.kt": {
+      "size": 11239,
+      "mtime": 1769281264206
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/DashboardViewModel.kt": {
+      "size": 878,
+      "mtime": 1768934788345
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/ForgotPasswordScreen.kt": {
+      "size": 2226,
+      "mtime": 1766381019793
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/LandingScreen.kt": {
+      "size": 3063,
+      "mtime": 1766380981139
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/LoginScreen.kt": {
+      "size": 6106,
+      "mtime": 1766382875251
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/MarketplaceScreen.kt": {
+      "size": 6006,
+      "mtime": 1767800169185
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/MarketplaceViewModel.kt": {
+      "size": 1406,
+      "mtime": 1767797267604
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/ProductDetailScreen.kt": {
+      "size": 9666,
+      "mtime": 1767858024188
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/ProvisioningScreen.kt": {
+      "size": 3736,
+      "mtime": 1768934788345
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/screens/SignUpScreen.kt": {
+      "size": 6786,
+      "mtime": 1769280648517
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/theme/Color.kt": {
+      "size": 574,
+      "mtime": 1767679535421
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/theme/Theme.kt": {
+      "size": 1705,
+      "mtime": 1767679535421
+    },
+    "app/src/main/java/com/joshua/chokepoint/ui/theme/Type.kt": {
+      "size": 1023,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/drawable/ic_launcher_background.xml": {
+      "size": 5776,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/drawable/ic_launcher_foreground.xml": {
+      "size": 1731,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-anydpi/ic_launcher.xml": {
+      "size": 348,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-anydpi/ic_launcher_round.xml": {
+      "size": 348,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-hdpi/ic_launcher.webp": {
+      "size": 1404,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-hdpi/ic_launcher_round.webp": {
+      "size": 2898,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-mdpi/ic_launcher.webp": {
+      "size": 982,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-mdpi/ic_launcher_round.webp": {
+      "size": 1772,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-xhdpi/ic_launcher.webp": {
+      "size": 1900,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp": {
+      "size": 3918,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-xxhdpi/ic_launcher.webp": {
+      "size": 2884,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp": {
+      "size": 5914,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp": {
+      "size": 3844,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp": {
+      "size": 7778,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/values/colors.xml": {
+      "size": 387,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/values/strings.xml": {
+      "size": 181,
+      "mtime": 1766379405667
+    },
+    "app/src/main/res/values/themes.xml": {
+      "size": 163,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/xml/backup_rules.xml": {
+      "size": 490,
+      "mtime": 1766378069313
+    },
+    "app/src/main/res/xml/data_extraction_rules.xml": {
+      "size": 569,
+      "mtime": 1766378069313
+    },
+    "app/src/test/java/com/joshua/chokepoint/ExampleUnitTest.kt": {
+      "size": 361,
+      "mtime": 1766378069330
+    },
+    "build.gradle.kts": {
+      "size": 344,
+      "mtime": 1766378069330
+    },
+    "firebase.json": {
+      "size": 234,
+      "mtime": 1767679535421
+    },
+    "firestore.indexes.json": {
+      "size": 46,
+      "mtime": 1767213751872
+    },
+    "firestore.rules": {
+      "size": 389,
+      "mtime": 1768934651883
+    },
+    "firmware/boot.py": {
+      "size": 67,
+      "mtime": 1768934788345
+    },
+    "firmware/config.py": {
+      "size": 294,
+      "mtime": 1768934788345
+    },
+    "firmware/file_mgr.py": {
+      "size": 1006,
+      "mtime": 1768934788350
+    },
+    "firmware/main.py": {
+      "size": 4186,
+      "mtime": 1768934788351
+    },
+    "firmware/mq135.py": {
+      "size": 541,
+      "mtime": 1768934788351
+    },
+    "firmware/ota.py": {
+      "size": 987,
+      "mtime": 1768934788352
+    },
+    "firmware/secrets.py": {
+      "size": 179,
+      "mtime": 1768934788353
+    },
+    "firmware/wifi_manager.py": {
+      "size": 6939,
+      "mtime": 1768934788353
+    },
+    "gradle/libs.versions.toml": {
+      "size": 3239,
+      "mtime": 1767799255581
+    },
+    "gradle/wrapper/gradle-wrapper.jar": {
+      "size": 45457,
+      "mtime": 1766378069333
+    },
+    "gradle/wrapper/gradle-wrapper.properties": {
+      "size": 289,
+      "mtime": 1766378069333
+    },
+    "gradle.properties": {
+      "size": 1368,
+      "mtime": 1766378069330
+    },
+    "gradlew": {
+      "size": 8979,
+      "mtime": 1766378069333
+    },
+    "gradlew.bat": {
+      "size": 2937,
+      "mtime": 1766378069333
+    },
+    "LICENSE": {
+      "size": 35823,
+      "mtime": 1766378069313
+    },
+    "local.properties": {
+      "size": 279,
+      "mtime": 1768933486688
+    },
+    "scripts/mqtt_simulator.js": {
+      "size": 2098,
+      "mtime": 1767295295796
+    },
+    "scripts/package-lock.json": {
+      "size": 89183,
+      "mtime": 1767798225997
+    },
+    "scripts/package.json": {
+      "size": 83,
+      "mtime": 1767798225956
+    },
+    "scripts/seed_marketplace.js": {
+      "size": 3187,
+      "mtime": 1767798282635
+    },
+    "scripts/service-account.json": {
+      "size": 2394,
+      "mtime": 1767798414131
+    },
+    "settings.gradle.kts": {
+      "size": 614,
+      "mtime": 1767679535423
+    }
+  }
+}

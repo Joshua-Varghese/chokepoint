@@ -18,9 +18,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SignUpScreen(
     isLoading: Boolean,
-    onSignUpClick: (String, String) -> Unit,
+    onSignUpClick: (String, String, String) -> Unit,
     onBackClick: () -> Unit
 ) {
+    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -74,6 +75,18 @@ fun SignUpScreen(
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Full Name") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Next
+                )
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = email,
@@ -141,8 +154,8 @@ fun SignUpScreen(
                     onClick = { 
                          emailTouched = true
                          passwordTouched = true
-                         if (isFormValid) {
-                             onSignUpClick(email, password) 
+                         if (isFormValid && name.isNotBlank()) {
+                             onSignUpClick(email, password, name) 
                          }
                     },
                     modifier = Modifier.fillMaxWidth(),

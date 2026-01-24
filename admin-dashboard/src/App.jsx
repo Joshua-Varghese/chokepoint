@@ -8,6 +8,7 @@ import Overview from './pages/Overview';
 import Products from './pages/Products';
 import Devices from './pages/Devices';
 import DeviceDetail from './pages/DeviceDetail';
+import Customers from './pages/Customers';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -34,7 +35,7 @@ function App() {
           <Route path="orders" element={<h2>Orders (Coming Soon)</h2>} />
           <Route path="devices" element={<Devices />} />
           <Route path="devices/:id" element={<DeviceDetail />} />
-          <Route path="customers" element={<h2>Customers (Coming Soon)</h2>} />
+          <Route path="customers" element={<Customers />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -68,4 +68,24 @@ class FirestoreRepository {
                 Log.w("Firestore", "Error adding document", e)
             }
     }
+
+    fun createUserProfile(uid: String, email: String, name: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+        val user = hashMapOf(
+            "email" to email,
+            "name" to name,
+            "id" to uid,
+            "createdAt" to com.google.firebase.Timestamp.now()
+        )
+
+        db.collection("users").document(uid)
+            .set(user)
+            .addOnSuccessListener { 
+                Log.d("Firestore", "User profile created for $uid")
+                onSuccess()
+            }
+            .addOnFailureListener { e ->
+                Log.e("Firestore", "Error creating user profile", e)
+                onFailure(e)
+            }
+    }
 }
