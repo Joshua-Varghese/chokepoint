@@ -4,26 +4,7 @@ service cloud.firestore {
     // 1. Products (Public Read)
     match /products/{productId} {
       allow read: if true;
-      allow write: if false;
-    }
-
-    // 2. Users (Private Profile & Device List)
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // 3. Devices (Global Registry)
-    // Allows creating new devices (Provisioning) and finding them (Linking)
-    match /devices/{deviceId} {
-      allow read, write: if request.auth != null;
-      
-      // 4. Sensor Readings (Protected Data)
-      // Only allow reading if the user has this device in their private list (Admin or Viewer)
-      match /sensor_readings/{readingId} {
-         allow read: if request.auth != null && 
-           exists(/databases/$(database)/documents/users/$(request.auth.uid)/devices/$(deviceId));
-         allow write: if false; // Only Admin SDK (MQTT Bridge) can write readings
-      }
+      allow write: if request.auth != null; // Allow authenticated admins to add/edit products
     }
     
     // Default deny

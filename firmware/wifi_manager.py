@@ -1,149 +1,157 @@
 import network
 import time
-import ujson
-import socket
+import ubinascii
 import machine
+import json
+import socket
 
-CONFIG_FILE = 'wifi.json'
-AP_SSID = "Chokepoint-Setup"
-AP_PASS = "" # Open
+class WifiManager:
+    def __init__(self, config_file="wifi.json"):
+        self.sta_if = network.WLAN(network.STA_IF)
+        self.ap_if = network.WLAN(network.AP_IF)
+        self.config_file = config_file
 
-def load_config():
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            return ujson.load(f)
-    except:
-        return None
+    def get_device_id(self):
+        return ubinascii.hexlify(machine.unique_id()).decode()
 
-def save_config(ssid, password):
-    with open(CONFIG_FILE, 'w') as f:
-        ujson.dump({"ssid": ssid, "pass": password}, f)
-
-def start_ap_mode():
-    print(f"Starting AP Mode: {AP_SSID}")
-    
-    network.WLAN(network.STA_IF).active(False)
-    time.sleep(0.5)
-
-    ap = network.WLAN(network.AP_IF)
-    ap.active(True)
-    time.sleep(0.5)
-    
-    try:
-        ap.config(essid=AP_SSID, password=AP_PASS)
-    except Exception as e:
-        print(f"SoftAP Config Error: {e}")
-    
-    print(f"AP Active. IP: {ap.ifconfig()[0]}")
-    
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(('', 80))
-    s.listen(1)
-    
-    print("Waiting for credentials on port 80...")
-    
-    while True:
+    def load_config(self):
         try:
-            conn, addr = s.accept()
-            print('Got connection from', addr)
-            request = conn.recv(1024)
-            request_str = str(request)
-            
-            # Simple Parser for /configure?ssid=...&pass=...
-            if "ssid=" in request_str:
-                try:
-                    # Extract SSID
-                    ssid_start = request_str.find("ssid=") + 5
-                    ssid_end = request_str.find("&", ssid_start)
-                    if ssid_end == -1: ssid_end = request_str.find(" ", ssid_start)
-                    ssid = request_str[ssid_start:ssid_end]
-                    
-                    # Extract Pass
-                    pass_start = request_str.find("pass=") + 5
-                    pass_end = request_str.find(" ", pass_start)
-                    if pass_end == -1: pass_end = len(request_str)
-                    http_idx = request_str.find(" HTTP", pass_start)
-                    if http_idx != -1 and http_idx < pass_end: pass_end = http_idx
-                    
-                    password = request_str[pass_start:pass_end]
-                    
-                    # Cleanup
-                    ssid = ssid.replace("%20", " ").replace("+", " ").replace("'", "").strip()
-                    password = password.replace("%20", " ").replace("+", " ").replace("'", "").strip()
-                    
-                    print(f"Parsed Creds: {ssid} / {password}")
-                    save_config(ssid, password)
-                    
-                    # Get ID
-                    import config
-                    device_id = getattr(config, 'DEVICE_ID', 'esp32_unknown')
-                    
-                    # JSON Response
-                    response_body = ujson.dumps({
-                        "status": "success",
-                        "device_id": device_id,
-                        "message": "Config Saved"
-                    })
-                    header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n"
-                    conn.send(header.encode() + response_body.encode())
-                    conn.close()
-                    
-                    time.sleep(2)
-                    machine.reset()
-                    
-                except Exception as e:
-                    print(f"Parse Error: {e}")
-                    conn.send(b"HTTP/1.1 400 Bad Request\r\n\r\nError")
-                    conn.close()
-            else:
-                 # Landing Page with Device ID for Manual Claiming
-                 import config
-                 did = getattr(config, 'DEVICE_ID', 'Loading...')
-                 
-                 resp = f"""HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n
-                 <html>
-                 <head><title>Chokepoint Setup</title></head>
-                 <body style='font-family:sans-serif; padding:20px'>
-                    <h1>Device Setup</h1>
-                    <div style='background:#eee; padding:10px; border-radius:5px'>
-                        <h3>Device ID:</h3>
-                        <h2 style='color:#007BFF'>{did}</h2>
-                        <p>If App setup fails, enter this ID manually in the App.</p>
-                    </div>
-                 </body>
-                 </html>"""
-                 conn.send(resp.encode())
-                 conn.close()
-                 
-        except Exception as e:
-            print(f"Server Error: {e}")
-            if 'conn' in locals() and conn: conn.close()
+            with open(self.config_file, 'r') as f:
+                data = json.load(f)
+                return data.get("ssid"), data.get("password")
+        except:
+            return None, None
 
-def connect():
-    conf = load_config()
-    if not conf:
-        start_ap_mode()
-        return False
-        
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    
-    if not wlan.isconnected():
-        print(f"Connecting to {conf['ssid']}...")
-        wlan.connect(conf['ssid'], conf['pass'])
-        
-        max_wait = 20
-        while max_wait > 0:
-            if wlan.status() == network.STAT_GOT_IP:
-                break
-            max_wait -= 1
+    def save_config(self, ssid, password):
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump({"ssid": ssid, "password": password}, f)
+            return True
+        except:
+            return False
+
+    def start_ap(self):
+        self.ap_if.active(True)
+        ssid = 'Chokepoint-' + self.get_device_id()
+        self.ap_if.config(essid=ssid, authmode=0)
+        print('AP Active: ', self.ap_if.ifconfig())
+        print('Connect to WiFi:', ssid)
+        print('Then browse to: http://192.168.4.1')
+
+    def connect(self, ssid, password):
+        self.sta_if.active(True)
+        self.sta_if.connect(ssid, password)
+        print('Connecting to', ssid, '...')
+        for _ in range(20):
+            if self.sta_if.isconnected():
+                print('Connected!', self.sta_if.ifconfig())
+                return True
             time.sleep(1)
-            
-    if wlan.status() == network.STAT_GOT_IP:
-        print('Connected:', wlan.ifconfig())
-        return True
-    else:
-        print("WiFi Failed. Starting AP.")
-        start_ap_mode()
         return False
+
+    def run_provisioning_server(self):
+        self.start_ap()
+        
+        # Simple HTTP Server for Provisioning
+        addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
+        s = socket.socket()
+        s.bind(addr)
+        s.listen(1)
+        print('Provisioning Server Listening on', addr)
+
+        while True:
+            cl, addr = s.accept()
+            print('Client connected from', addr)
+            try:
+                cl_file = cl.makefile('rwb', 0)
+                while True:
+                    line = cl_file.readline()
+                    if not line or line == b'\r\n':
+                        break
+                    # Parse Body if POST
+                    if line.startswith(b'POST'):
+                        # Read body (simplified content-length parsing omitted for brevity in demo)
+                        # We expect simple raw JSON or form data
+                        pass
+                
+                # Capture GET request line
+                request_line = line.decode()
+                addr = addr[0]
+                
+                # Consume remaining headers
+                while True:
+                    h = cl_file.readline()
+                    if not h or h == b'\r\n':
+                        break
+
+                print("Request:", request_line)
+                
+                # Parsing Logic
+                if 'GET /save?' in request_line:
+                    try:
+                        path = request_line.split(' ')[1]
+                        query = path.split('?')[1]
+                        # Safe parameter parsing
+                        params = {}
+                        for pair in query.split('&'):
+                            if '=' in pair:
+                                k, v = pair.split('=', 1)
+                                params[k] = v.replace('+', ' ').replace('%20', ' ')
+                        
+                        ssid = params.get('ssid', '').strip()
+                        pwd = params.get('password', '').strip()
+                        
+                        if ssid:
+                            self.save_config(ssid, pwd)
+                            # Success Response
+                            cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
+                            cl.send('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>')
+                            cl.send('<body style="font-family:sans-serif; text-align:center; padding:20px;">')
+                            cl.send('<h1>Saved!</h1><p>Restarting...</p>')
+                            cl.send('</body></html>')
+                            cl.send('</body></html>')
+                            print("Config Saved. Rebooting in 3 seconds...")
+                            time.sleep(3)
+                            cl.close()
+                            machine.reset()
+                        else:
+                            print("Ignored empty SSID")
+                    except Exception as e:
+                        print("Parse Error", e)
+
+                # Serve Form (Mobile Friendly)
+                response = """HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f4f5; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 320px; }
+                        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; text-align: center; color: #18181b; }
+                        input { width: 100%; padding: 12px; margin-bottom: 1rem; border: 1px solid #e4e4e7; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+                        button { width: 100%; padding: 12px; background: #000; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
+                        label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: #52525b; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>Setup WiFi</h1>
+                        <form action="/save" method="get">
+                            <label>Network Name</label>
+                            <input name="ssid" placeholder="MyWiFi" required>
+                            <label>Password</label>
+                            <input name="password" type="password" placeholder="********">
+                            <button type="submit">Connect</button>
+                        </form>
+                    </div>
+                </body>
+                </html>
+                """
+                cl.send(response)
+                
+            except Exception as e:
+                print("Server Error", e)
+            finally:
+                cl.close()
+

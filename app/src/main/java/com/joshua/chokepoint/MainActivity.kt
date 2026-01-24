@@ -125,16 +125,16 @@ class MainActivity : ComponentActivity() {
                     composable("signup") {
                         SignUpScreen(
                             isLoading = isLoading,
-                            onSignUpClick = { email, password ->
+                            onSignUpClick = { email, password, name ->
                                 isLoading = true
-                                signUpWithEmail(email, password) { success, message ->
-                                    isLoading = false
+                                signUpWithEmail(email, password, name) { success, message ->
                                     if (success) {
-                                        Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
-                                        navController.navigate("dashboard") {
-                                            popUpTo("landing") { inclusive = true }
-                                        }
+                                         Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
+                                         navController.navigate("dashboard") {
+                                             popUpTo("landing") { inclusive = true }
+                                         }
                                     } else {
+                                        isLoading = false
                                         Toast.makeText(this@MainActivity, "Sign Up Failed: $message", Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -198,20 +198,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onHistoryClick = {
-                                navController.navigate("analytics")
+                                val id = sensorData.deviceId.ifEmpty { "unknown" }
+                                navController.navigate("analytics/$id")
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
                             },
-                             onDevicesClick = {
-                                navController.navigate("devices")
-                            }
-                        )
-                    }
-
-                    composable("devices") {
-                        com.joshua.chokepoint.ui.screens.DevicesScreen(
-                            onBackClick = { navController.popBackStack() },
                             onAddDeviceClick = {
                                 navController.navigate("provisioning")
                             }
@@ -219,27 +211,22 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("provisioning") {
-                        val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
-                        val scope = rememberCoroutineScope()
-                        
-                        com.joshua.chokepoint.ui.screens.ProvisioningScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onPairSuccess = {
-                                scope.launch {
-                                    // Auto-save the new device to the user's list
-                                    repo.addDevice("New Sensor")
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@MainActivity, "Device Provisioned & Saved!", Toast.LENGTH_SHORT).show()
-                                        navController.popBackStack() // Go back to Devices
-                                    }
-                                }
-                            }
-                        )
+                         com.joshua.chokepoint.ui.screens.ProvisioningScreen(
+                             onBackClick = {
+                                 navController.popBackStack()
+                             },
+                             onProvisionComplete = {
+                                 // Optionally navigate somewhere or just pop back
+                                 navController.popBackStack()
+                             }
+                         )
                     }
 
-                    composable("analytics") {
+                    composable("analytics/{deviceId}") { backStackEntry ->
+                        val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
                         val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
                         com.joshua.chokepoint.ui.screens.AnalyticsScreen(
+                            deviceId = deviceId,
                             repository = firestoreRepository,
                             onBackClick = {
                                 navController.popBackStack()
@@ -353,11 +340,21 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    private fun signUpWithEmail(email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+    private fun signUpWithEmail(email: String, pass: String, name: String, onResult: (Boolean, String?) -> Unit) {
         auth.createUserWithEmailAndPassword(email, pass)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    onResult(true, null)
+                    // Create Firestore Profile
+                    val uid = task.result.user?.uid ?: ""
+                    val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                    repo.createUserProfile(uid, email, name, 
+                        onSuccess = {
+                             onResult(true, null)
+                        },
+                        onFailure = { e ->
+                             onResult(false, "Profile Sync Failed: ${e.localizedMessage}")
+                        }
+                    )
                 } else {
                     Log.w("Auth", "createUserWithEmail:failure", task.exception)
                     onResult(false, task.exception?.localizedMessage)

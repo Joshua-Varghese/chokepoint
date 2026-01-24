@@ -1,78 +1,111 @@
-# main.py - Main Loop (DUMMY DATA MODE)
 import time
-import ujson
 import machine
-import urandom # For dummy data
-from umqtt.simple import MQTTClient
+import ubinascii
+import json
 import config
+from wifi_manager import WifiManager
+from umqtt.simple import MQTTClient
+try:
+    import mq135
+except ImportError:
+    mq135 = None
 
-# --- Dummy Data Generator ---
-def read_dummy_sensor():
-    # Simulate a gas sensor value between 100 and 4095
-    # Vary it slightly to look realistic
-    base = 500
-    noise = urandom.getrandbits(10) # 0-1023
-    raw_value = base + noise
+# --- Global State ---
+device_id = ubinascii.hexlify(machine.unique_id()).decode()
+wm = WifiManager()
+mqtt = None
+
+# --- Sensor Mock if mq135 missing ---
+if mq135:
+    mq = mq135.MQ135(34) # Pin 34
+else:
+    class MockSensor:
+        def get_readings(self):
+            return {"co2": 400.0, "nh3": 0.05, "smoke": 10.0}
+    mq = MockSensor()
+
+def mqtt_callback(topic, msg):
+    print("MSG:", topic, msg)
+    try:
+        cmd = json.loads(msg)
+        if cmd.get('cmd') == 'reset':
+            machine.reset()
+        elif cmd.get('cmd') == 'ping':
+            mqtt.publish(f"devices/{device_id}/status", "pong")
+    except:
+        pass
+
+def main():
+    global mqtt
+    print("Booting Chokepoint Firmware...")
+    print("Device ID:", device_id)
     
-    # Logic for status
-    status = "Good"
-    if raw_value > 2500:
-        status = "Hazardous"
-    elif raw_value > 1500:
-        status = "Poor"
-    elif raw_value > 800:
-        status = "Moderate"
-        
-    return raw_value, status
+    # 1. Try to load and connect WiFi
+    ssid, password = wm.load_config()
+    connected = False
+    
+    if ssid:
+        print(f"Found Config for {ssid}")
+        connected = wm.connect(ssid, password)
+    
+    # 2. If Failed -> Provisioning Mode
+    if not connected:
+        print("WiFi Connection Failed or Config Missing.")
+        # Only start AP if we really can't connect.
+        # Check if we should retry or go straight to AP. 
+        # For now, go to AP.
+        wm.run_provisioning_server()
+        return # run_provisioning_server loops forever/resets
 
-def connect_mqtt():
-    global client
-    print(f"Connecting to MQTT Broker: {config.MQTT_SERVER}")
+    # 3. MQTT Connection
+    print("WiFi Connected. Connecting to RabbitMQ...")
     try:
-        client = MQTTClient(config.DEVICE_ID, config.MQTT_SERVER, 
-                           user=config.MQTT_USER, password=config.MQTT_PASS, 
-                           keepalive=config.MQTT_KEEPALIVE)
-        client.connect()
-        print("Connected to MQTT")
-        return True
+        mqtt = MQTTClient(
+            client_id=device_id,
+            server=config.MQTT_BROKER,
+            port=config.MQTT_PORT,
+            user=config.MQTT_USER,
+            password=config.MQTT_PASS,
+            keepalive=60
+        )
+        mqtt.set_callback(mqtt_callback)
+        mqtt.connect()
+        print("MQTT Connected!")
+        
+        # Subscribe
+        cmd_topic = f"devices/{device_id}/cmd"
+        mqtt.subscribe(cmd_topic)
+        
+        # Main Loop
+        while True:
+            try:
+                mqtt.check_msg()
+                
+                # Read Sensor
+                data = mq.get_readings() # Returns dict
+                data['device_id'] = device_id
+                data['timestamp'] = int(time.time())
+                
+                # Publish
+                payload = json.dumps(data)
+                mqtt.publish(config.MQTT_TOPIC_DATA, payload)
+                print("Pub:", payload)
+                
+                time.sleep(2)
+                
+            except OSError as e:
+                print("MQTT Error:", e)
+                # Try reconnect
+                try: 
+                    mqtt.connect() 
+                    mqtt.subscribe(cmd_topic)
+                except: 
+                    time.sleep(5)
+                    
     except Exception as e:
-        print(f"MQTT Connection Failed: {e}")
-        return False
+        print("Fatal Error:", e)
+        time.sleep(10)
+        machine.reset()
 
-def restart():
-    print("Soft Resetting...")
-    machine.reset()
-
-# --- Main Logic ---
-print("Starting Sensor Loop (SIMULATION MODE)...")
-
-client = None
-while True:
-    try:
-        if not client:
-            if not connect_mqtt():
-                time.sleep(5)
-                continue
-
-        # 1. Generate Dummy Data
-        raw, quality = read_dummy_sensor()
-        print(f"Simulating: Raw={raw} | Quality={quality}")
-        
-        # 2. Prepare Payload
-        payload = ujson.dumps({
-            "device_id": config.DEVICE_ID,
-            "gas_raw": raw,
-            "air_quality": quality,
-            "timestamp": time.time()
-        })
-        
-        # 3. Publish
-        client.publish(config.DATA_TOPIC, payload)
-        print(f"Published to {config.DATA_TOPIC}")
-        
-    except OSError as e:
-        print(f"MQTT/Network Error: {e}")
-        client = None # Force reconnect
-        time.sleep(2)
-        
-    time.sleep(config.READ_INTERVAL)
+if __name__ == "__main__":
+    main()
