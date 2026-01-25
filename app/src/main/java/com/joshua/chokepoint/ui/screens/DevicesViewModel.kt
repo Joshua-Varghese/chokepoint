@@ -30,4 +30,14 @@ class DevicesViewModel(private val repository: FirestoreRepository) : ViewModel(
             repository.removeDevice(deviceId)
         }
     }
+
+    fun clearDeviceHistory(deviceId: String) {
+        viewModelScope.launch {
+            repository.clearDeviceHistory(
+                deviceId = deviceId,
+                onSuccess = { /* Handle success if needed, e.g. show toast via effect */ },
+                onError = { /* Handle error */ }
+            )
+        }
+    }
 }

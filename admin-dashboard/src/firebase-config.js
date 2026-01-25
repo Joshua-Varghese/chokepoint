@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDyoKR0xLGDOUU2cNhphu95bjS-0OKWwdM",
-    authDomain: "chokepoint-android.firebaseapp.com",
-    projectId: "chokepoint-android",
-    storageBucket: "chokepoint-android.firebasestorage.app",
-    messagingSenderId: "164679848850",
-    appId: "1:164679848850:web:86de06076356783d254580"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);

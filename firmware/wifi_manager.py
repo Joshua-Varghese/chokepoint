@@ -60,38 +60,45 @@ class WifiManager:
         print('Provisioning Server Listening on', addr)
 
         while True:
-            cl, addr = s.accept()
-            print('Client connected from', addr)
             try:
+                cl, addr = s.accept()
+                cl.settimeout(3.0) # Avoid hanging
+                print('Client connected from', addr)
+                
                 cl_file = cl.makefile('rwb', 0)
-                while True:
-                    line = cl_file.readline()
-                    if not line or line == b'\r\n':
-                        break
-                    # Parse Body if POST
-                    if line.startswith(b'POST'):
-                        # Read body (simplified content-length parsing omitted for brevity in demo)
-                        # We expect simple raw JSON or form data
-                        pass
                 
-                # Capture GET request line
-                request_line = line.decode()
-                addr = addr[0]
+                # Read Request Line
+                try:
+                    raw_req = cl_file.readline()
+                except Exception as e:
+                    print("Read Error:", e)
+                    cl.close()
+                    continue
+
+                if not raw_req:
+                    print("Empty Request")
+                    cl.close()
+                    continue
                 
-                # Consume remaining headers
+                print("Raw Request:", raw_req)
+                request_line = raw_req.decode().strip()
+                
+                # Consume Headers (prevent blocking)
                 while True:
-                    h = cl_file.readline()
-                    if not h or h == b'\r\n':
+                    try:
+                        line = cl_file.readline()
+                        if not line or line == b'\r\n' or line == b'\n':
+                            break
+                    except:
                         break
 
-                print("Request:", request_line)
+                print("Parsed Request:", request_line)
                 
                 # Parsing Logic
                 if 'GET /save?' in request_line:
                     try:
                         path = request_line.split(' ')[1]
                         query = path.split('?')[1]
-                        # Safe parameter parsing
                         params = {}
                         for pair in query.split('&'):
                             if '=' in pair:
@@ -103,55 +110,60 @@ class WifiManager:
                         
                         if ssid:
                             self.save_config(ssid, pwd)
-                            # Success Response
-                            cl.send('HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
-                            cl.send('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>')
-                            cl.send('<body style="font-family:sans-serif; text-align:center; padding:20px;">')
-                            cl.send('<h1>Saved!</h1><p>Restarting...</p>')
-                            cl.send('</body></html>')
-                            cl.send('</body></html>')
-                            print("Config Saved. Rebooting in 3 seconds...")
-                            time.sleep(3)
+                            # Success Response with Device ID
+                            device_id = self.get_device_id()
+                            success_html = """HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n
+                            <!DOCTYPE html><html>
+                            <head><meta name="viewport" content="width=device-width, initial-scale=1">
+                            <style>body{font-family:sans-serif;background:#222;color:#fff;text-align:center;padding:20px;}
+                            .id{background:#333;padding:10px;font-family:monospace;font-size:1.2em;border-radius:4px;margin:10px 0;user-select:all;}
+                            </style></head>
+                            <body>
+                                <h1>Saved!</h1>
+                                <p>Device ID:</p>
+                                <div class="id">""" + device_id + """</div>
+                                <p>Copy this ID to claim the device in the app.</p>
+                                <p>Restarting...</p>
+                            </body></html>"""
+                            cl.send(success_html.encode())
+                            time.sleep(1)
                             cl.close()
+                            time.sleep(2)
                             machine.reset()
                         else:
                             print("Ignored empty SSID")
                     except Exception as e:
                         print("Parse Error", e)
 
-                # Serve Form (Mobile Friendly)
-                response = """HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n
+                # Serve Form
+                response = """HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <title>Chokepoint Setup</title>
                     <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f4f5; padding: 20px; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-                        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 320px; }
-                        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; text-align: center; color: #18181b; }
-                        input { width: 100%; padding: 12px; margin-bottom: 1rem; border: 1px solid #e4e4e7; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-                        button { width: 100%; padding: 12px; background: #000; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
-                        label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: #52525b; }
+                        body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; text-align: center; }
+                        input { padding: 10px; margin: 10px 0; width: 100%; box-sizing: border-box; }
+                        button { padding: 10px; width: 100%; background: #0f0; color: #000; border: none; font-weight: bold; }
                     </style>
                 </head>
                 <body>
-                    <div class="card">
-                        <h1>Setup WiFi</h1>
-                        <form action="/save" method="get">
-                            <label>Network Name</label>
-                            <input name="ssid" placeholder="MyWiFi" required>
-                            <label>Password</label>
-                            <input name="password" type="password" placeholder="********">
-                            <button type="submit">Connect</button>
-                        </form>
-                    </div>
+                    <h2>Setup WiFi</h2>
+                    <form action="/save" method="get">
+                        <input name="ssid" placeholder="WiFi Name (SSID)" required>
+                        <input name="password" type="password" placeholder="Password">
+                        <button type="submit">save</button>
+                    </form>
                 </body>
                 </html>
                 """
-                cl.send(response)
+                cl.send(response.encode())
                 
             except Exception as e:
                 print("Server Error", e)
             finally:
-                cl.close()
+                try: cl.close()
+                except: pass
+
 

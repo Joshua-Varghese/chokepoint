@@ -5,6 +5,10 @@ data class SensorData(
     val co2: Double = 0.0,
     val nh3: Double = 0.0,
     val smoke: Double = 0.0,
-    val timestamp: Long = System.currentTimeMillis(),
-    val deviceId: String = ""
+    
+    // Firmware Data
+    val deviceId: String = "",
+    val gasRaw: Int = 0,
+    val airQuality: String = "Unknown",
+    val timestamp: Long = System.currentTimeMillis()
 )

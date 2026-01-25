@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     private var isLoading by mutableStateOf(false)
     private var onLoginSuccess: (() -> Unit)? = null
+    private var onMissingProfile: (() -> Unit)? = null
 
     private val signInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -108,6 +109,11 @@ class MainActivity : ComponentActivity() {
                                         popUpTo("landing") { inclusive = true }
                                     }
                                 }
+                                onMissingProfile = {
+                                    navController.navigate("complete_profile") {
+                                        popUpTo("landing") { inclusive = true }
+                                    }
+                                }
                                 signInWithGoogle()
                             },
                             onForgotPasswordClick = {
@@ -118,6 +124,30 @@ class MainActivity : ComponentActivity() {
                             },
                             onSignUpClick = {
                                 navController.navigate("signup")
+                            }
+                        )
+                    }
+
+                    composable("complete_profile") {
+                        com.joshua.chokepoint.ui.screens.CompleteProfileScreen(
+                            onSaveClick = { name ->
+                                val user = auth.currentUser
+                                if (user != null) {
+                                    val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                                    repo.syncUserProfile(
+                                        uid = user.uid,
+                                        email = user.email ?: "",
+                                        name = name,
+                                        onSuccess = {
+                                            navController.navigate("dashboard") {
+                                                popUpTo("complete_profile") { inclusive = true }
+                                            }
+                                        },
+                                        onFailure = {
+                                            Toast.makeText(this@MainActivity, "Failed to save profile.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
                             }
                         )
                     }
@@ -204,6 +234,9 @@ class MainActivity : ComponentActivity() {
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
                             },
+                            onDevicesClick = {
+                                navController.navigate("devices")
+                            },
                             onAddDeviceClick = {
                                 navController.navigate("provisioning")
                             }
@@ -216,10 +249,20 @@ class MainActivity : ComponentActivity() {
                                  navController.popBackStack()
                              },
                              onProvisionComplete = {
-                                 // Optionally navigate somewhere or just pop back
                                  navController.popBackStack()
                              }
                          )
+                    }
+
+                    composable("devices") {
+                        com.joshua.chokepoint.ui.screens.DevicesScreen(
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onAddDeviceClick = {
+                                navController.navigate("provisioning")
+                            }
+                        )
                     }
 
                     composable("analytics/{deviceId}") { backStackEntry ->
@@ -317,10 +360,59 @@ class MainActivity : ComponentActivity() {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential)
             .addOnCompleteListener(this) { task ->
-                isLoading = false
                 if (task.isSuccessful) {
-                    Log.d("Auth", "Login success: ${auth.currentUser?.email}")
-                    onLoginSuccess?.invoke()
+                    val user = auth.currentUser
+                    Log.d("Auth", "Login success: ${user?.email}")
+                    
+                    if (user != null) {
+                        // Check if we have a name
+                        val googleName = user.displayName
+                        if (googleName.isNullOrBlank()) {
+                            // Name missing -> Go to Complete Profile Screen
+                            // We need to trigger navigation. Since we are in a callback, 
+                            // we rely on onLoginSuccess to handle commonly but here we need a specific 'incomplete' state.
+                            // BUT, onLoginSuccess is currently void.
+                            // Let's modify the architecture slightly: 
+                            // We will expose a separate callback or handle it via a boolean flag/livedata observation?
+                            // Simpler: Just run on specific logic if we can access navController. 
+                            // But we can't easily access navController here directly without restructuring.
+                            // WORKAROUND: We will piggyback on onLoginSuccess but we need to check the user in the UI?
+                            // No, let's just update the onLoginSuccess signature or use a mutable state that triggers navigation.
+                            
+                            // Let's use a MutableState in MainActivity that the LaunchedEffect or similar observes?
+                            // Or, since we defined onLoginSuccess as a lambda that CAPTURES the navController in onCreate,
+                            // we can re-define it? No, it's defined inside composable usually or passed down.
+                            // Wait, onLoginSuccess is a property of MainActivity: `private var onLoginSuccess: (() -> Unit)? = null`
+                            // And it's assigned inside the `composable("login")` block! 
+                            // So it captures the SPECIFIC navController for that screen.
+                            
+                            // ISSUE: If we want to navigate to "complete_profile", we need a DIFFERENT callback or pass parameters.
+                            // Let's change onLoginSuccess to take a boolean 'needsProfile'.
+                            
+                            // ACTUALLY: The easiest fix is to simply attempt the sync. 
+                            // If name is empty, we sync it as empty/placeholder, BUT we navigate to "complete_profile" 
+                            // immediately after login if we detect it's empty.
+                            
+                            // Let's modify the onLoginSuccess lambda in the composable "login" to check the current user's state.
+                             onLoginSuccess?.invoke() // This just goes to dashboard.
+                             // We need to intervene.
+                             
+                             // Let's separate "onLoginSuccess" (dashboard) from "onMissingProfile".
+                             onMissingProfile?.invoke()
+                        } else {
+                            val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                            repo.syncUserProfile(
+                                uid = user.uid,
+                                email = user.email ?: "",
+                                name = googleName,
+                                onSuccess = { onLoginSuccess?.invoke() },
+                                onFailure = { onLoginSuccess?.invoke() }
+                            )
+                        }
+                    } else {
+                         // Should not happen
+                         onLoginSuccess?.invoke()
+                    }
                 } else {
                     Log.e("Auth", "Firebase auth failed", task.exception)
                     Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()

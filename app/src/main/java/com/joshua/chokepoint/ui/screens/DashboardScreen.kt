@@ -31,6 +31,7 @@ fun DashboardScreen(
     onLogoutClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onMarketplaceClick: () -> Unit,
+    onDevicesClick: () -> Unit,
     onAddDeviceClick: () -> Unit
 ) {
     Scaffold(
