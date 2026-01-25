@@ -18,12 +18,12 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "com.joshua.chokepoint"
-    compileSdk = 35 // Fixed potentially invalid syntax "release(36)" to standard integer if needed, or matched user intent. keeping simple for now, actually "release(36)" looked weird. checking standard.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.joshua.chokepoint"
         minSdk = 29
-        targetSdk = 35 // Syncing with compileSdk
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
