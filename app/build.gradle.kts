@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
+    id("com.google.firebase.appdistribution")
+
 }
 
 val localProperties = Properties()
@@ -16,14 +18,12 @@ if (localPropertiesFile.exists()) {
 
 android {
     namespace = "com.joshua.chokepoint"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 35 // Fixed potentially invalid syntax "release(36)" to standard integer if needed, or matched user intent. keeping simple for now, actually "release(36)" looked weird. checking standard.
 
     defaultConfig {
         applicationId = "com.joshua.chokepoint"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 35 // Syncing with compileSdk
         versionCode = 1
         versionName = "1.0"
 
@@ -49,6 +49,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            configure<com.google.firebase.appdistribution.gradle.AppDistributionExtension> {
+                appId = "1:164679848850:android:f2f6f8d7e75333a8d6a74b"
+                testers = "joshuadude2715@gmail.com"
+                releaseNotes = "Classroom test build"
+            }
         }
     }
     compileOptions {

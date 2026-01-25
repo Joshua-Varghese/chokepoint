@@ -31,7 +31,7 @@ def mqtt_callback(topic, msg):
         if cmd.get('cmd') == 'reset':
             machine.reset()
         elif cmd.get('cmd') == 'ping':
-            mqtt.publish(f"devices/{device_id}/status", "pong")
+            mqtt.publish(f"chokepoint/devices/{device_id}/status", "pong")
     except:
         pass
 
@@ -73,7 +73,7 @@ def main():
         print("MQTT Connected!")
         
         # Subscribe
-        cmd_topic = f"devices/{device_id}/cmd"
+        cmd_topic = f"chokepoint/devices/{device_id}/cmd"
         mqtt.subscribe(cmd_topic)
         
         # Main Loop
@@ -88,7 +88,8 @@ def main():
                 
                 # Publish
                 payload = json.dumps(data)
-                mqtt.publish(config.MQTT_TOPIC_DATA, payload)
+                topic = f"chokepoint/devices/{device_id}/data"
+                mqtt.publish(topic, payload)
                 print("Pub:", payload)
                 
                 time.sleep(2)
