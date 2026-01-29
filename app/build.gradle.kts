@@ -29,16 +29,16 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        val webClientId = localProperties.getProperty("default_web_client_id") ?: ""
+        val webClientId = localProperties.getProperty("default_web_client_id") ?: System.getenv("DEFAULT_WEB_CLIENT_ID") ?: ""
         buildConfigField("String", "DEFAULT_WEB_CLIENT_ID", "\"$webClientId\"")
 
-        val mqttBrokerUrl = localProperties.getProperty("mqtt_broker_url") ?: ""
+        val mqttBrokerUrl = localProperties.getProperty("mqtt_broker_url") ?: System.getenv("MQTT_BROKER_URL") ?: ""
         buildConfigField("String", "MQTT_BROKER_URL", "\"$mqttBrokerUrl\"")
 
-        val mqttUsername = localProperties.getProperty("mqtt_username") ?: ""
+        val mqttUsername = localProperties.getProperty("mqtt_username") ?: System.getenv("MQTT_USERNAME") ?: ""
         buildConfigField("String", "MQTT_USERNAME", "\"$mqttUsername\"")
 
-        val mqttPassword = localProperties.getProperty("mqtt_password") ?: ""
+        val mqttPassword = localProperties.getProperty("mqtt_password") ?: System.getenv("MQTT_PASSWORD") ?: ""
         buildConfigField("String", "MQTT_PASSWORD", "\"$mqttPassword\"")
     }
 
@@ -49,10 +49,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
             configure<com.google.firebase.appdistribution.gradle.AppDistributionExtension> {
                 appId = "1:164679848850:android:f2f6f8d7e75333a8d6a74b"
                 testers = "joshuadude2715@gmail.com"
-                releaseNotes = "Classroom test build"
+                releaseNotes = "Automated Debug/CI Build"
             }
         }
     }
