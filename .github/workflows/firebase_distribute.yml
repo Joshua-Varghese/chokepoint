@@ -14,6 +14,12 @@ jobs:
       MQTT_USERNAME: ${{ secrets.MQTT_USERNAME }}
       MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
 
+      # Automated Versioning
+      # Version Code = Run Number (e.g., 42)
+      BUILD_VERSION_CODE: ${{ github.run_number }}
+      # Version Name = 1.0.{RunNumber} (e.g., 1.0.42)
+      BUILD_VERSION_NAME: "1.0.${{ github.run_number }}"
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
