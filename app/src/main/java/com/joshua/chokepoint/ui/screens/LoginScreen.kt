@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.joshua.chokepoint.BuildConfig
 
 @Composable
 fun LoginScreen(
@@ -168,6 +169,12 @@ fun LoginScreen(
             
             // Spacer to balance the view, slightly less weight to keep things centered upwards
              Spacer(modifier = Modifier.weight(0.2f))
+             
+             Text(
+                text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+             )
         }
     }
 }

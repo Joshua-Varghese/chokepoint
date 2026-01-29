@@ -26,6 +26,9 @@ import com.joshua.chokepoint.ui.theme.ChokepointandroidTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 
 class MainActivity : ComponentActivity() {
 
@@ -35,6 +38,13 @@ class MainActivity : ComponentActivity() {
     private var isLoading by mutableStateOf(false)
     private var onLoginSuccess: (() -> Unit)? = null
     private var onMissingProfile: (() -> Unit)? = null
+
+    // Update State
+    private var updateRelease: com.google.firebase.appdistribution.AppDistributionRelease? by mutableStateOf(null)
+    private var isUpdateDialogVisible by mutableStateOf(false)
+    private var isDownloading by mutableStateOf(false)
+    private var downloadProgress by mutableStateOf(0f)
+    private var downloadStatus by mutableStateOf("")
 
     private val signInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -61,6 +71,62 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private fun checkForUpdate() {
+        val appDistribution = com.google.firebase.appdistribution.FirebaseAppDistribution.getInstance()
+        appDistribution.checkForNewRelease()
+            .addOnSuccessListener { release ->
+                if (release != null) {
+                    val currentVersionCode = BuildConfig.VERSION_CODE.toLong()
+                    val newVersionCode = release.versionCode
+                    
+                    if (newVersionCode > currentVersionCode) {
+                        updateRelease = release
+                        isUpdateDialogVisible = true
+                    } else {
+                        Log.d("AppDistribution", "New release found ($newVersionCode) but it is not newer than current ($currentVersionCode). Skipping.")
+                    }
+                }
+            }
+            .addOnFailureListener {
+                Log.e("AppDistribution", "Check failed", it)
+            }
+    }
+
+    private fun startUpdate() {
+        // Check for "Install Unknown Apps" permission (Android 8.0+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                intent.data = android.net.Uri.parse("package:$packageName")
+                startActivity(intent)
+                Toast.makeText(this, "Please allow installing unknown apps", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        val release = updateRelease ?: return
+        isUpdateDialogVisible = false
+        isDownloading = true
+        downloadStatus = "Starting download..."
+        
+        val appDistribution = com.google.firebase.appdistribution.FirebaseAppDistribution.getInstance()
+        appDistribution.updateApp()
+            .addOnProgressListener { progress ->
+                val percentage = progress.apkBytesDownloaded * 100 / progress.apkFileTotalBytes
+                downloadProgress = percentage.toFloat() / 100f
+                downloadStatus = "Downloading: $percentage%"
+            }
+            .addOnSuccessListener {
+                 downloadStatus = "Ready to install!"
+                 // App closes automatically to install
+            }
+            .addOnFailureListener {
+                isDownloading = false
+                downloadStatus = "Update failed: ${it.localizedMessage}"
+                Toast.makeText(this, "Update Failed", Toast.LENGTH_LONG).show()
+            }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -69,6 +135,49 @@ class MainActivity : ComponentActivity() {
         setContent {
             ChokepointandroidTheme {
                 val navController = rememberNavController()
+
+                // Update Dialog Overlay
+                if (isUpdateDialogVisible && updateRelease != null) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { isUpdateDialogVisible = false },
+                        title = { androidx.compose.material3.Text("New Update Available") },
+                        text = { 
+                            androidx.compose.material3.Text(
+                                "Version: ${updateRelease?.displayVersion} (${updateRelease?.versionCode})\n\n" +
+                                "Notes: ${updateRelease?.releaseNotes}"
+                            ) 
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.Button(onClick = { startUpdate() }) {
+                                androidx.compose.material3.Text("Update Now")
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { isUpdateDialogVisible = false }) {
+                                androidx.compose.material3.Text("Later")
+                            }
+                        }
+                    )
+                }
+
+                // Progress Dialog Overlay
+                if (isDownloading) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { /* Prevent dismiss */ },
+                        title = { androidx.compose.material3.Text("Updating App...") },
+                        text = {
+                            androidx.compose.foundation.layout.Column {
+                                androidx.compose.material3.Text(downloadStatus)
+                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                                )
+                            }
+                        },
+                        confirmButton = {}
+                    )
+                }
 
                 // Determine start destination
                 val currentUser = auth.currentUser
@@ -333,6 +442,11 @@ class MainActivity : ComponentActivity() {
         if (user != null) {
             Log.d("Auth", "Already logged in: ${user.email}")
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkForUpdate()
     }
 
     private fun setupGoogleSignIn() {
