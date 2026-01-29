@@ -8,6 +8,17 @@ on:
 jobs:
   distribute:
     runs-on: ubuntu-latest
+    env:
+      DEFAULT_WEB_CLIENT_ID: ${{ secrets.DEFAULT_WEB_CLIENT_ID }}
+      MQTT_BROKER_URL: ${{ secrets.MQTT_BROKER_URL }}
+      MQTT_USERNAME: ${{ secrets.MQTT_USERNAME }}
+      MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
+
+      # Automated Versioning
+      # Version Code = Run Number (e.g., 42)
+      BUILD_VERSION_CODE: ${{ github.run_number }}
+      # Version Name = 1.0.{RunNumber} (e.g., 1.0.42)
+      BUILD_VERSION_NAME: "1.0.${{ github.run_number }}"
 
     steps:
       - name: Checkout repo
@@ -23,12 +34,24 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Decode Firebase service account JSON
-        run: echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" > firebase-key.json
+        env:
+          SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+        run: echo "$SERVICE_ACCOUNT_BASE64" | base64 --decode > firebase-key.json
+
+      - name: Restore google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: echo "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+
+      - name: Restore Admin Dashboard .env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE_BASE64 }}
+        run: echo "$ENV_FILE" | base64 --decode > admin-dashboard/.env
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
       - name: Upload to Firebase App Distribution
-        run: |
-          ./gradlew appDistributionUploadDebug \
-            -PfirebaseAppDistribution.serviceCredentialsFile=firebase-key.json
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ github.workspace }}/firebase-key.json"
+        run: ./gradlew appDistributionUploadDebug
