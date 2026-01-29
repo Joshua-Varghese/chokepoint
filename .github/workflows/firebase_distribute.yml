@@ -44,6 +44,6 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Upload to Firebase App Distribution
-        run: |
-          ./gradlew appDistributionUploadDebug \
-            -PfirebaseAppDistribution.serviceCredentialsFile=firebase-key.json
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ github.workspace }}/firebase-key.json"
+        run: ./gradlew appDistributionUploadDebug
