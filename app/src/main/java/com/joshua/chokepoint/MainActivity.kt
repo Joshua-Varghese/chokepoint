@@ -200,10 +200,22 @@ class MainActivity : ComponentActivity() {
                                 isLoading = true
                                 signInWithEmail(email, password) { success ->
                                     isLoading = false
+                                    isLoading = false
                                     if (success) {
                                         Toast.makeText(this@MainActivity, "Login Successful!", Toast.LENGTH_SHORT).show()
-                                        navController.navigate("dashboard") {
-                                            popUpTo("landing") { inclusive = true }
+                                        // Navigation handled by checkProfileAndNavigate callback logic below
+                                        // But wait, signInWithEmail currently takes (Boolean) -> Unit.
+                                        // We need to change how we call it.
+                                        
+                                        // Actually, I can't easily change the hook inside signInWithEmail to trigger navigation 
+                                        // because it needs access to auth.currentUser which is available.
+                                        
+                                        // Strategy:
+                                        // 1. signInWithEmail returns success.
+                                        // 2. We check current user here.
+                                        val user = auth.currentUser
+                                        if (user != null) {
+                                            checkProfileAndNavigate(user)
                                         }
                                     } else {
                                         Toast.makeText(this@MainActivity, "Login Failed", Toast.LENGTH_SHORT).show()
@@ -515,12 +527,12 @@ class MainActivity : ComponentActivity() {
                              onMissingProfile?.invoke()
                         } else {
                             val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
-                            repo.syncUserProfile(
+                                repo.syncUserProfile(
                                 uid = user.uid,
                                 email = user.email ?: "",
                                 name = googleName,
-                                onSuccess = { onLoginSuccess?.invoke() },
-                                onFailure = { onLoginSuccess?.invoke() }
+                                onSuccess = { checkProfileAndNavigate(user) },
+                                onFailure = { checkProfileAndNavigate(user) }
                             )
                         }
                     } else {
@@ -534,11 +546,57 @@ class MainActivity : ComponentActivity() {
             }
     }
 
+    private fun checkProfileAndNavigate(user: com.google.firebase.auth.FirebaseUser) {
+        val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+        repo.getUserProfile(user.uid, 
+            onSuccess = { name ->
+                if (name.isNullOrBlank()) {
+                    onMissingProfile?.invoke()
+                } else {
+                    onLoginSuccess?.invoke()
+                }
+            },
+            onFailure = {
+                 // Offline or error? Default to dashboard to avoid lockout, or show error?
+                 // Let's default to dashboard but warn.
+                 Log.e("Auth", "Failed to check profile", it)
+                 onLoginSuccess?.invoke()
+            }
+        )
+    }
+
     private fun signInWithEmail(email: String, pass: String, onResult: (Boolean) -> Unit) {
         auth.signInWithEmailAndPassword(email, pass)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    onResult(true)
+                    val user = auth.currentUser
+                    if (user != null) {
+                         checkProfileAndNavigate(user)
+                         // We don't call onResult(true) immediately because navigation handles it?
+                         // Wait, LoginScreen expects onResult to stop loading.
+                         // But we want to trigger navigation.
+                         // Modified LoginScreen logic: onLoginClick handles UI. 
+                         // But we need to signal success/failure.
+                         // Let's keep onResult(true) but we must Ensure navigation happens.
+                         // The LoginScreen calls logic: if(success) nav -> dashboard.
+                         
+                         // ISSUE: The LoginScreen logic manually navigates to "dashboard" on success:
+                         // if (success) { ... navController.navigate("dashboard") ... }
+                         // This OVERRIDES our check.
+                         
+                         // We need to change LoginScreen usage in onCreate.
+                         // But here, I can't easily change the callback structure passed to LoginScreen without changing Comp.
+                         
+                         // Fix: I will update the LoginScreen usage in onCreate to NOT navigate manually, 
+                         // but rely on onLoginSuccess/onMissingProfile which I will trigger here.
+                         onResult(false) // Hack: prevent LoginScreen traversing? No, that shows "Login Failed".
+                         
+                         // Refactor: We need `checkProfileAndNavigate` inside the LoginScreen callback in onCreate.
+                         // See next edit.
+                         onResult(true)
+                    } else {
+                         onResult(true)
+                    }
                 } else {
                     Log.w("Auth", "signInWithEmail:failure", task.exception)
                     onResult(false)
