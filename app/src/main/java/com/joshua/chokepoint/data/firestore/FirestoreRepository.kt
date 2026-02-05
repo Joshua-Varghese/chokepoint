@@ -13,56 +13,6 @@ class FirestoreRepository {
     private val db = FirebaseFirestore.getInstance()
     private val collection = db.collection("sensor_readings")
 
-    /**
-     * Observes the last [limit] readings in real-time.
-     */
-    fun observeRecentReadings(limit: Int = 20): Flow<List<SensorData>> = callbackFlow {
-        val listener = collection
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit.toLong())
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("Firestore", "Listen failed.", e)
-                    close(e)
-                    return@addSnapshotListener
-                }
-
-                if (snapshot != null) {
-                    val readings = snapshot.documents.mapNotNull { doc ->
-                        try {
-                            // Map manually or use toObject if SensorData matches exactly
-                            val co2 = doc.getDouble("co2") ?: 0.0
-                            val nh3 = doc.getDouble("nh3") ?: 0.0
-                            val smoke = doc.getDouble("smoke") ?: 0.0
-                            val timestamp = doc.getTimestamp("timestamp")?.toDate()?.time ?: 0L
-                            
-                            SensorData(
-                                co2 = co2, 
-                                nh3 = nh3, 
-                                smoke = smoke, 
-                                timestamp = timestamp
-                            )
-                        } catch (e: Exception) {
-                            Log.e("Firestore", "Error parsing doc ${doc.id}", e)
-                            null
-                        }
-                    }
-                    trySend(readings)
-                }
-            }
-
-        awaitClose { listener.remove() }
-    }
-    fun saveSensorData(data: SensorData) {
-        collection.add(data)
-            .addOnSuccessListener {
-                Log.d("Firestore", "DocumentSnapshot added with ID: ${it.id}")
-            }
-            .addOnFailureListener { e ->
-                Log.w("Firestore", "Error adding document", e)
-            }
-    }
-
     // --- Device Management ---
     private val devicesCollection = db.collection("devices")
 
@@ -109,6 +59,7 @@ class FirestoreRepository {
 
     fun addDevice(name: String) {
         // Deprecated: Use claimDevice instead
+        // For backwards compatibility during transition if needed
     }
 
     fun claimDevice(deviceId: String, name: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
@@ -204,8 +155,163 @@ class FirestoreRepository {
     fun removeDevice(deviceId: String) {
         val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
         
-        db.collection("users").document(userId)
-            .collection("devices").document(deviceId)
-            .delete()
+        // 1. Check Global Role
+        devicesCollection.document(deviceId).get().addOnSuccessListener { doc ->
+            val adminId = doc.getString("adminId")
+            
+            if (adminId == userId) {
+                // User IS Admin -> Full Nuke
+                Log.d("Firestore", "User is Admin. Unclaiming and Wiping device $deviceId")
+                
+                // A. Unclaim (Remove adminId, shareCode, reset name)
+                devicesCollection.document(deviceId).update(
+                    mapOf(
+                        "adminId" to null,
+                        "shareCode" to null,
+                        "name" to "Unclaimed Device"
+                    )
+                )
+                
+                // B. Wipe Data
+                clearDeviceHistory(deviceId, {}, {})
+            }
+            
+            // 2. Remove from Private List (Always do this)
+            db.collection("users").document(userId)
+                .collection("devices").document(deviceId)
+                .delete()
+        }
+    }
+
+    fun clearDeviceHistory(deviceId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        // This requires deleting all documents in the subcollection.
+        // Firestore does not support deleting a whole collection client-side efficiently without listing.
+        // We will list and delete in batches.
+        val readingsRef = db.collection("devices").document(deviceId).collection("readings")
+        
+        readingsRef.get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                for (doc in snapshot.documents) {
+                    batch.delete(doc.reference)
+                }
+                batch.commit()
+                    .addOnSuccessListener { onSuccess() }
+                    .addOnFailureListener { e -> onError(e) }
+            }
+            .addOnFailureListener { e -> onError(e) }
+    }
+
+    /**
+     * Observes the last [limit] readings in real-time.
+     */
+    /**
+     * Observes the last [limit] readings for a specific device.
+     */
+    fun observeRecentReadings(deviceId: String, limit: Int = 20): Flow<List<SensorData>> = callbackFlow {
+        if (deviceId.isEmpty()) {
+            close(IllegalArgumentException("DeviceId cannot be empty"))
+            return@callbackFlow
+        }
+
+        val listener = db.collection("devices").document(deviceId).collection("readings")
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(limit.toLong())
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("Firestore", "Listen failed.", e)
+                    close(e)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val readings = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.toObject(SensorData::class.java)
+                        } catch (e: Exception) {
+                            Log.e("Firestore", "Error parsing doc ${doc.id}", e)
+                            null
+                        }
+                    }
+                    trySend(readings)
+                }
+            }
+
+        awaitClose { listener.remove() }
+    }
+
+    fun saveSensorData(data: SensorData) {
+        if (data.deviceId.isEmpty()) {
+            Log.w("Firestore", "Skipping save: No Device ID")
+            return
+        }
+
+        db.collection("devices")
+            .document(data.deviceId)
+            .collection("readings")
+            .add(data)
+            .addOnSuccessListener {
+                Log.d("Firestore", "Reading saved to devices/${data.deviceId}/readings/${it.id}")
+            }
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error adding document", e)
+            }
+    }
+
+    fun createUserProfile(uid: String, email: String, name: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+        val user = hashMapOf(
+            "email" to email,
+            "name" to name,
+            "id" to uid,
+            "createdAt" to com.google.firebase.Timestamp.now()
+        )
+
+        db.collection("users").document(uid)
+            .set(user)
+            .addOnSuccessListener { 
+                Log.d("Firestore", "User profile created for $uid")
+                onSuccess()
+            }
+            .addOnFailureListener { e ->
+                Log.e("Firestore", "Error creating user profile", e)
+                onFailure(e)
+            }
+    }
+    fun syncUserProfile(uid: String, email: String, name: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+        val userRef = db.collection("users").document(uid)
+        
+        userRef.get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.exists()) {
+                    // Update name if missing or empty
+                    val existingName = snapshot.getString("name")
+                    if (existingName.isNullOrBlank() && name.isNotBlank()) {
+                         userRef.update("name", name)
+                            .addOnSuccessListener { onSuccess() }
+                            .addOnFailureListener { onFailure(it) }
+                    } else {
+                        // Already exists and has name (or we have no better name), just proceed
+                        onSuccess()
+                    }
+                } else {
+                    // Create new profile
+                    val newUser = hashMapOf(
+                        "email" to email,
+                        "name" to name.ifBlank { "User ${uid.take(5)}" },
+                        "id" to uid,
+                        "createdAt" to com.google.firebase.Timestamp.now()
+                    )
+                    userRef.set(newUser)
+                        .addOnSuccessListener { 
+                            Log.d("Firestore", "User profile synced for $uid")
+                            onSuccess() 
+                        }
+                        .addOnFailureListener { 
+                            Log.e("Firestore", "Error syncing user profile", it)
+                            onFailure(it) 
+                        }
+                }
+            }
+            .addOnFailureListener { onFailure(it) }
     }
 }

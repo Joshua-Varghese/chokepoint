@@ -33,6 +33,11 @@ fun DevicesScreen(
     var selectedDevice by remember { mutableStateOf<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device?>(null) }
     var newName by remember { mutableStateOf("") }
     var spectateCode by remember { mutableStateOf("") }
+
+    // Claim Device State (Moved up)
+    var showClaimDialog by remember { mutableStateOf(false) }
+    var claimDeviceId by remember { mutableStateOf("") }
+    var claimDeviceName by remember { mutableStateOf("") }
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -74,22 +79,82 @@ fun DevicesScreen(
         AlertDialog(
             onDismissRequest = { showAddOptionsDialog = false },
             title = { Text("Add Device") },
-            text = { Text("Do you want to setup a new device or spectate an existing one?") },
+            text = { Text("Choose how you want to add a device:") },
             confirmButton = {
-                Button(
-                   onClick = {
-                       showAddOptionsDialog = false
-                       onAddDeviceClick() // Go to Provisioning
-                   } 
-                ) { Text("Setup New Device") }
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            showAddOptionsDialog = false
+                            onAddDeviceClick() // Go to Provisioning
+                        } 
+                    ) { Text("Setup New Device (WiFi)") }
+                    
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            showAddOptionsDialog = false
+                            showClaimDialog = true // Open Claim Dialog
+                        } 
+                    ) { Text("Claim Existing Device (ID)") }
+                    
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            showAddOptionsDialog = false
+                            showSpectateDialog = true // Open Spectate Dialog
+                        }
+                    ) { Text("Spectate via Code") }
+                }
             },
             dismissButton = {
-                TextButton(
+                TextButton(onClick = { showAddOptionsDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+
+
+    if (showClaimDialog) {
+        AlertDialog(
+            onDismissRequest = { showClaimDialog = false },
+            title = { Text("Claim Device") },
+            text = {
+                Column {
+                    Text("Enter the Device ID found on the sticker or logs.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = claimDeviceId,
+                        onValueChange = { claimDeviceId = it },
+                        label = { Text("Device ID (e.g. fce8...)") }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = claimDeviceName,
+                        onValueChange = { claimDeviceName = it },
+                        label = { Text("Nickname") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
                     onClick = {
-                        showAddOptionsDialog = false
-                        showSpectateDialog = true // Open Spectate Input
+                        repo.claimDevice(
+                            deviceId = claimDeviceId.trim(),
+                            name = claimDeviceName.ifBlank { "My Device" },
+                            onSuccess = {
+                                showClaimDialog = false
+                                android.widget.Toast.makeText(context, "Device Claimed Successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            onError = { e ->
+                                android.widget.Toast.makeText(context, "Error: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
-                ) { Text("Spectate Existing") }
+                ) { Text("Claim") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClaimDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -177,6 +242,10 @@ fun DevicesScreen(
                                 newName = device.name
                                 showEditDialog = true
                             },
+                            onClearHistory = {
+                                viewModel.clearDeviceHistory(device.id)
+                                android.widget.Toast.makeText(context, "History Cleared", android.widget.Toast.LENGTH_SHORT).show()
+                            },
                             onCopyCode = {
                                 if (device.shareCode.isNotEmpty()) {
                                     clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(device.shareCode))
@@ -196,8 +265,28 @@ fun DeviceListItem(
     device: com.joshua.chokepoint.data.firestore.FirestoreRepository.Device, 
     onDelete: () -> Unit, 
     onEdit: () -> Unit,
+    onClearHistory: () -> Unit, // New callback
     onCopyCode: () -> Unit
 ) {
+    var showClearConfirm by remember { mutableStateOf(false) }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Clear History?") },
+            text = { Text("This will permanently delete all sensor data for this device.") },
+            confirmButton = {
+                TextButton(onClick = { 
+                    onClearHistory()
+                    showClearConfirm = false 
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f)),
@@ -259,9 +348,18 @@ fun DeviceListItem(
                         IconButton(onClick = onEdit) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        // Clear Data Button
+                        IconButton(onClick = { showClearConfirm = true }) {
+                           Icon(Icons.Default.Delete, contentDescription = "Clear History", tint = MaterialTheme.colorScheme.error)
+                           // Re-using Delete icon but maybe with different tint or we need a real clean icon.
+                           // Actually, let's stick to Delete for now as 'Sweep' is not in default set often.
+                        }
                      }
                     IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error.copy(alpha=0.7f))
+                        // Using Close or RemoveCircle for Delete Device to distinguish?
+                        // Let's keep it simple. The user asked for clean up.
+                        // I will use `Clear` icon if available, or just Delete.
+                        Icon(Icons.Default.Delete, contentDescription = "Remove Device", tint = MaterialTheme.colorScheme.onSurface.copy(alpha=0.4f))
                     }
                 }
             }

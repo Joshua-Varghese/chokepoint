@@ -11,7 +11,7 @@ export default function Products() {
 
     // Form State
     const [formData, setFormData] = useState({
-        name: '', price: '', stock: '', category: 'monitors'
+        name: '', price: '', stock: '', category: 'monitors', imageUrl: ''
     });
 
     const fetchData = async () => {
@@ -35,7 +35,8 @@ export default function Products() {
             name: product.name,
             price: product.price,
             stock: product.stock,
-            category: product.category
+            category: product.category,
+            imageUrl: product.imageUrl || ''
         });
         setEditingId(product.id);
         setIsModalOpen(true);
@@ -170,6 +171,40 @@ export default function Products() {
                                     <option value="masks">Masks</option>
                                     <option value="plants">Plants</option>
                                 </select>
+                            </div>
+
+                            {/* Image Upload Placeholder */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Product Image</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <div style={{
+                                        width: '60px', height: '60px', borderRadius: '8px',
+                                        background: '#f4f4f5', border: '1px solid #e4e4e7',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden'
+                                    }}>
+                                        {formData.imageUrl ? (
+                                            <img src={formData.imageUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <span style={{ fontSize: '0.75rem', color: '#a1a1aa' }}>No Img</span>
+                                        )}
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                                // Temporary: Create local URL for preview
+                                                const url = URL.createObjectURL(file);
+                                                setFormData({ ...formData, imageUrl: url, imageFile: file });
+                                            }
+                                        }}
+                                        style={{ fontSize: '0.875rem' }}
+                                    />
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: '#71717a', marginTop: '0.25rem' }}>
+                                    * Storage integration coming soon.
+                                </p>
                             </div>
                             <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem', background: '#000' }}>
                                 {editingId ? 'Update Product' : 'Save Product'}

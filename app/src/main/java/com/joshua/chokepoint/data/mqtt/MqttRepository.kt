@@ -7,6 +7,7 @@ import com.joshua.chokepoint.data.model.SensorData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import info.mqtt.android.service.MqttAndroidClient
 import org.eclipse.paho.client.mqttv3.*
 import org.json.JSONObject
@@ -111,28 +112,55 @@ class MqttRepository(
         }
     }
 
+    private var claimedDeviceIds: Set<String> = emptySet()
+
+    // Initialize in a coroutine scope (e.g. from ViewModel or by making MqttRepository a helper)
+    // However, since MqttRepository is just a class here, we need to start observing somewhere.
+    // For simplicity given the current architecture, we'll expose a function to start filtering
+    // or rely on the fact that we can launch a coroutine if we had a scope.
+    // To avoid architectural refractory, we'll use a listener approach or just check against cache.
+    // BETTER APPROACH: We'll launch a coroutine in the constructor/init block using GlobalScope (careful) 
+    // or pass a scope. Given this is a prototype, GlobalScope or a dedicated scope is acceptable.
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+
+    init {
+        // Start watching for allowed devices immediately
+        scope.launch {
+            firestoreRepository.observeDevices().collect { devices ->
+                claimedDeviceIds = devices.map { it.id }.toSet()
+                Log.d("MQTT", "Updated Allowed Devices: $claimedDeviceIds")
+            }
+        }
+    }
+
     private fun parsePayload(jsonString: String) {
         try {
             val json = JSONObject(jsonString)
-            
-            // Extract Firmware Data
-            val deviceId = json.optString("device_id", "unknown")
-            val gasRaw = json.optInt("gas_raw", 0)
-            val airQuality = json.optString("air_quality", "Unknown")
-            val timestamp = json.optLong("timestamp", System.currentTimeMillis())
+            val deviceId = json.optString("device_id", "unknown_device")
 
-            // Legacy support
+            // SECURITY CHECK: Only allow claimed devices
+            if (!claimedDeviceIds.contains(deviceId)) {
+                Log.w("MQTT", "Ignored data from unclaimed device: $deviceId")
+                return
+            }
+
             val co2 = json.optDouble("co2", 0.0)
             val nh3 = json.optDouble("nh3", 0.0)
             val smoke = json.optDouble("smoke", 0.0)
             
             val data = SensorData(
-                co2 = co2, nh3 = nh3, smoke = smoke,
-                deviceId = deviceId, gasRaw = gasRaw, airQuality = airQuality, timestamp = timestamp
+                co2 = co2,
+                nh3 = nh3,
+                smoke = smoke,
+                deviceId = deviceId,
+                timestamp = System.currentTimeMillis(),
+                // Fill in defaults for restored fields if not available in MQTT payload
+                gasRaw = json.optInt("gas_raw", 0),
+                airQuality = json.optString("air_quality", "Unknown")
             )
             _sensorData.value = data
             
-            // Save to Firestore for history
+            // Save to Firestore history (sub-collection)
             firestoreRepository.saveSensorData(data)
             
         } catch (e: Exception) {

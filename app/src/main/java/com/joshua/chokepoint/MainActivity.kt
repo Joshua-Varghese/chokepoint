@@ -26,6 +26,9 @@ import com.joshua.chokepoint.ui.theme.ChokepointandroidTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 
 class MainActivity : ComponentActivity() {
 
@@ -34,6 +37,14 @@ class MainActivity : ComponentActivity() {
 
     private var isLoading by mutableStateOf(false)
     private var onLoginSuccess: (() -> Unit)? = null
+    private var onMissingProfile: (() -> Unit)? = null
+
+    // Update State
+    private var updateRelease: com.google.firebase.appdistribution.AppDistributionRelease? by mutableStateOf(null)
+    private var isUpdateDialogVisible by mutableStateOf(false)
+    private var isDownloading by mutableStateOf(false)
+    private var downloadProgress by mutableStateOf(0f)
+    private var downloadStatus by mutableStateOf("")
 
     private val signInLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -60,6 +71,62 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private fun checkForUpdate() {
+        val appDistribution = com.google.firebase.appdistribution.FirebaseAppDistribution.getInstance()
+        appDistribution.checkForNewRelease()
+            .addOnSuccessListener { release ->
+                if (release != null) {
+                    val currentVersionCode = BuildConfig.VERSION_CODE.toLong()
+                    val newVersionCode = release.versionCode
+                    
+                    if (newVersionCode > currentVersionCode) {
+                        updateRelease = release
+                        isUpdateDialogVisible = true
+                    } else {
+                        Log.d("AppDistribution", "New release found ($newVersionCode) but it is not newer than current ($currentVersionCode). Skipping.")
+                    }
+                }
+            }
+            .addOnFailureListener {
+                Log.e("AppDistribution", "Check failed", it)
+            }
+    }
+
+    private fun startUpdate() {
+        // Check for "Install Unknown Apps" permission (Android 8.0+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                intent.data = android.net.Uri.parse("package:$packageName")
+                startActivity(intent)
+                Toast.makeText(this, "Please allow installing unknown apps", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        val release = updateRelease ?: return
+        isUpdateDialogVisible = false
+        isDownloading = true
+        downloadStatus = "Starting download..."
+        
+        val appDistribution = com.google.firebase.appdistribution.FirebaseAppDistribution.getInstance()
+        appDistribution.updateApp()
+            .addOnProgressListener { progress ->
+                val percentage = progress.apkBytesDownloaded * 100 / progress.apkFileTotalBytes
+                downloadProgress = percentage.toFloat() / 100f
+                downloadStatus = "Downloading: $percentage%"
+            }
+            .addOnSuccessListener {
+                 downloadStatus = "Ready to install!"
+                 // App closes automatically to install
+            }
+            .addOnFailureListener {
+                isDownloading = false
+                downloadStatus = "Update failed: ${it.localizedMessage}"
+                Toast.makeText(this, "Update Failed", Toast.LENGTH_LONG).show()
+            }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -68,6 +135,49 @@ class MainActivity : ComponentActivity() {
         setContent {
             ChokepointandroidTheme {
                 val navController = rememberNavController()
+
+                // Update Dialog Overlay
+                if (isUpdateDialogVisible && updateRelease != null) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { isUpdateDialogVisible = false },
+                        title = { androidx.compose.material3.Text("New Update Available") },
+                        text = { 
+                            androidx.compose.material3.Text(
+                                "Version: ${updateRelease?.displayVersion} (${updateRelease?.versionCode})\n\n" +
+                                "Notes: ${updateRelease?.releaseNotes}"
+                            ) 
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.Button(onClick = { startUpdate() }) {
+                                androidx.compose.material3.Text("Update Now")
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { isUpdateDialogVisible = false }) {
+                                androidx.compose.material3.Text("Later")
+                            }
+                        }
+                    )
+                }
+
+                // Progress Dialog Overlay
+                if (isDownloading) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { /* Prevent dismiss */ },
+                        title = { androidx.compose.material3.Text("Updating App...") },
+                        text = {
+                            androidx.compose.foundation.layout.Column {
+                                androidx.compose.material3.Text(downloadStatus)
+                                androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                                )
+                            }
+                        },
+                        confirmButton = {}
+                    )
+                }
 
                 // Determine start destination
                 val currentUser = auth.currentUser
@@ -108,6 +218,11 @@ class MainActivity : ComponentActivity() {
                                         popUpTo("landing") { inclusive = true }
                                     }
                                 }
+                                onMissingProfile = {
+                                    navController.navigate("complete_profile") {
+                                        popUpTo("landing") { inclusive = true }
+                                    }
+                                }
                                 signInWithGoogle()
                             },
                             onForgotPasswordClick = {
@@ -122,19 +237,43 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    composable("complete_profile") {
+                        com.joshua.chokepoint.ui.screens.CompleteProfileScreen(
+                            onSaveClick = { name ->
+                                val user = auth.currentUser
+                                if (user != null) {
+                                    val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                                    repo.syncUserProfile(
+                                        uid = user.uid,
+                                        email = user.email ?: "",
+                                        name = name,
+                                        onSuccess = {
+                                            navController.navigate("dashboard") {
+                                                popUpTo("complete_profile") { inclusive = true }
+                                            }
+                                        },
+                                        onFailure = {
+                                            Toast.makeText(this@MainActivity, "Failed to save profile.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
+                            }
+                        )
+                    }
+
                     composable("signup") {
                         SignUpScreen(
                             isLoading = isLoading,
-                            onSignUpClick = { email, password ->
+                            onSignUpClick = { email, password, name ->
                                 isLoading = true
-                                signUpWithEmail(email, password) { success, message ->
-                                    isLoading = false
+                                signUpWithEmail(email, password, name) { success, message ->
                                     if (success) {
-                                        Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
-                                        navController.navigate("dashboard") {
-                                            popUpTo("landing") { inclusive = true }
-                                        }
+                                         Toast.makeText(this@MainActivity, "Account Created!", Toast.LENGTH_SHORT).show()
+                                         navController.navigate("dashboard") {
+                                             popUpTo("landing") { inclusive = true }
+                                         }
                                     } else {
+                                        isLoading = false
                                         Toast.makeText(this@MainActivity, "Sign Up Failed: $message", Toast.LENGTH_SHORT).show()
                                     }
                                 }
@@ -198,20 +337,15 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onHistoryClick = {
-                                navController.navigate("analytics")
+                                val id = sensorData.deviceId.ifEmpty { "unknown" }
+                                navController.navigate("analytics/$id")
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
                             },
-                             onDevicesClick = {
+                            onDevicesClick = {
                                 navController.navigate("devices")
-                            }
-                        )
-                    }
-
-                    composable("devices") {
-                        com.joshua.chokepoint.ui.screens.DevicesScreen(
-                            onBackClick = { navController.popBackStack() },
+                            },
                             onAddDeviceClick = {
                                 navController.navigate("provisioning")
                             }
@@ -219,27 +353,32 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("provisioning") {
-                        val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
-                        val scope = rememberCoroutineScope()
-                        
-                        com.joshua.chokepoint.ui.screens.ProvisioningScreen(
-                            onBackClick = { navController.popBackStack() },
-                            onPairSuccess = {
-                                scope.launch {
-                                    // Auto-save the new device to the user's list
-                                    repo.addDevice("New Sensor")
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@MainActivity, "Device Provisioned & Saved!", Toast.LENGTH_SHORT).show()
-                                        navController.popBackStack() // Go back to Devices
-                                    }
-                                }
+                         com.joshua.chokepoint.ui.screens.ProvisioningScreen(
+                             onBackClick = {
+                                 navController.popBackStack()
+                             },
+                             onProvisionComplete = {
+                                 navController.popBackStack()
+                             }
+                         )
+                    }
+
+                    composable("devices") {
+                        com.joshua.chokepoint.ui.screens.DevicesScreen(
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onAddDeviceClick = {
+                                navController.navigate("provisioning")
                             }
                         )
                     }
 
-                    composable("analytics") {
+                    composable("analytics/{deviceId}") { backStackEntry ->
+                        val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
                         val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
                         com.joshua.chokepoint.ui.screens.AnalyticsScreen(
+                            deviceId = deviceId,
                             repository = firestoreRepository,
                             onBackClick = {
                                 navController.popBackStack()
@@ -305,6 +444,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkForUpdate()
+    }
+
     private fun setupGoogleSignIn() {
         auth = FirebaseAuth.getInstance()
 
@@ -330,10 +474,59 @@ class MainActivity : ComponentActivity() {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential)
             .addOnCompleteListener(this) { task ->
-                isLoading = false
                 if (task.isSuccessful) {
-                    Log.d("Auth", "Login success: ${auth.currentUser?.email}")
-                    onLoginSuccess?.invoke()
+                    val user = auth.currentUser
+                    Log.d("Auth", "Login success: ${user?.email}")
+                    
+                    if (user != null) {
+                        // Check if we have a name
+                        val googleName = user.displayName
+                        if (googleName.isNullOrBlank()) {
+                            // Name missing -> Go to Complete Profile Screen
+                            // We need to trigger navigation. Since we are in a callback, 
+                            // we rely on onLoginSuccess to handle commonly but here we need a specific 'incomplete' state.
+                            // BUT, onLoginSuccess is currently void.
+                            // Let's modify the architecture slightly: 
+                            // We will expose a separate callback or handle it via a boolean flag/livedata observation?
+                            // Simpler: Just run on specific logic if we can access navController. 
+                            // But we can't easily access navController here directly without restructuring.
+                            // WORKAROUND: We will piggyback on onLoginSuccess but we need to check the user in the UI?
+                            // No, let's just update the onLoginSuccess signature or use a mutable state that triggers navigation.
+                            
+                            // Let's use a MutableState in MainActivity that the LaunchedEffect or similar observes?
+                            // Or, since we defined onLoginSuccess as a lambda that CAPTURES the navController in onCreate,
+                            // we can re-define it? No, it's defined inside composable usually or passed down.
+                            // Wait, onLoginSuccess is a property of MainActivity: `private var onLoginSuccess: (() -> Unit)? = null`
+                            // And it's assigned inside the `composable("login")` block! 
+                            // So it captures the SPECIFIC navController for that screen.
+                            
+                            // ISSUE: If we want to navigate to "complete_profile", we need a DIFFERENT callback or pass parameters.
+                            // Let's change onLoginSuccess to take a boolean 'needsProfile'.
+                            
+                            // ACTUALLY: The easiest fix is to simply attempt the sync. 
+                            // If name is empty, we sync it as empty/placeholder, BUT we navigate to "complete_profile" 
+                            // immediately after login if we detect it's empty.
+                            
+                            // Let's modify the onLoginSuccess lambda in the composable "login" to check the current user's state.
+                             onLoginSuccess?.invoke() // This just goes to dashboard.
+                             // We need to intervene.
+                             
+                             // Let's separate "onLoginSuccess" (dashboard) from "onMissingProfile".
+                             onMissingProfile?.invoke()
+                        } else {
+                            val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                            repo.syncUserProfile(
+                                uid = user.uid,
+                                email = user.email ?: "",
+                                name = googleName,
+                                onSuccess = { onLoginSuccess?.invoke() },
+                                onFailure = { onLoginSuccess?.invoke() }
+                            )
+                        }
+                    } else {
+                         // Should not happen
+                         onLoginSuccess?.invoke()
+                    }
                 } else {
                     Log.e("Auth", "Firebase auth failed", task.exception)
                     Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
@@ -353,11 +546,21 @@ class MainActivity : ComponentActivity() {
             }
     }
 
-    private fun signUpWithEmail(email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+    private fun signUpWithEmail(email: String, pass: String, name: String, onResult: (Boolean, String?) -> Unit) {
         auth.createUserWithEmailAndPassword(email, pass)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
-                    onResult(true, null)
+                    // Create Firestore Profile
+                    val uid = task.result.user?.uid ?: ""
+                    val repo = com.joshua.chokepoint.data.firestore.FirestoreRepository()
+                    repo.createUserProfile(uid, email, name, 
+                        onSuccess = {
+                             onResult(true, null)
+                        },
+                        onFailure = { e ->
+                             onResult(false, "Profile Sync Failed: ${e.localizedMessage}")
+                        }
+                    )
                 } else {
                     Log.w("Auth", "createUserWithEmail:failure", task.exception)
                     onResult(false, task.exception?.localizedMessage)

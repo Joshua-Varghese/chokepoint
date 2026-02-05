@@ -1,2 +1,1 @@
-import wifi_manager
-wifi_manager.connect()
+# boot.py -- run on boot-up
