@@ -32,10 +32,10 @@ export default function DeviceDetail() {
         fetchDevice();
 
         // Connect MQTT (WebSockets)
-        // CloudAMQP: wss://BROKER/ws/mqtt
-        const client = mqtt.connect('wss://puffin.rmq2.cloudamqp.com:443/ws/mqtt', {
-            username: 'lztdkevt',
-            password: 'vG7j8gUsE9yG5Li7Mb8qaAcpExZLgdUS'
+        // Connect MQTT (WebSockets)
+        const client = mqtt.connect(import.meta.env.VITE_MQTT_BROKER_URL, {
+            username: import.meta.env.VITE_MQTT_USERNAME,
+            password: import.meta.env.VITE_MQTT_PASSWORD
         });
 
         client.on('connect', () => {
