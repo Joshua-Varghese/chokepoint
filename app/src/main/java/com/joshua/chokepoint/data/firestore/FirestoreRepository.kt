@@ -314,4 +314,16 @@ class FirestoreRepository {
             }
             .addOnFailureListener { onFailure(it) }
     }
+
+    fun getUserProfile(uid: String, onSuccess: (String?) -> Unit, onFailure: (Exception) -> Unit) {
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { document ->
+                if (document.exists()) {
+                    onSuccess(document.getString("name"))
+                } else {
+                    onSuccess(null)
+                }
+            }
+            .addOnFailureListener { onFailure(it) }
+    }
 }

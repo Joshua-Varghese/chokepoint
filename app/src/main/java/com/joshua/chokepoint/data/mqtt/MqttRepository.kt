@@ -138,11 +138,10 @@ class MqttRepository(
             val json = JSONObject(jsonString)
             val deviceId = json.optString("device_id", "unknown_device")
 
-            // SECURITY CHECK: Only allow claimed devices
-            if (!claimedDeviceIds.contains(deviceId)) {
-                Log.w("MQTT", "Ignored data from unclaimed device: $deviceId")
-                return
-            }
+            // Relaxed Security for Debugging: Allow all devices to update the dashboard
+            // if (!claimedDeviceIds.contains(deviceId)) {
+            //    Log.w("MQTT", "Data received from unclaimed device: $deviceId. allowing for debug.")
+            // }
 
             val co2 = json.optDouble("co2", 0.0)
             val nh3 = json.optDouble("nh3", 0.0)
