@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --color-primary: #18181b;
+  --color-primary-fg: #ffffff;
+}
+
+:root {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+
+  --bg-color: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-hover: #f4f4f5;
+  --text-main: #09090b;
+  --text-muted: #71717a;
+  --border: #e4e4e7;
+  --primary: #18181b;
+  /* Zinc 900 */
+  --primary-fg: #ffffff;
+  --danger: #ef4444;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+}
