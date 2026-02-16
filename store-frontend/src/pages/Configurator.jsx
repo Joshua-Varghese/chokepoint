@@ -107,14 +107,18 @@ export default function Configurator() {
         </div>
     );
 
-    const OptionCard = ({ title, price, description, selected, onClick, type = 'radio' }) => (
+    const OptionCard = ({ title, price, description, selected, onClick, type = 'radio', disabled, disabledReason }) => (
         <div
-            onClick={onClick}
+            onClick={!disabled ? onClick : undefined}
             className={`
-                relative p-5 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md
-                ${selected
+                relative p-5 rounded-lg border-2 transition-all
+                ${disabled
+                    ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
+                    : 'cursor-pointer hover:shadow-md'
+                }
+                ${selected && !disabled
                     ? 'border-blue-700 bg-blue-50/10 ring-1 ring-blue-700'
-                    : 'border-gray-300 hover:border-gray-400'
+                    : (!disabled ? 'border-gray-300 hover:border-gray-400' : '')
                 }
             `}
         >
@@ -126,7 +130,14 @@ export default function Configurator() {
             </div>
             <p className="text-sm text-gray-500 mb-4 line-clamp-2">{description}</p>
 
-            {selected && (
+            {disabled && (
+                <div className="flex items-center gap-2 text-xs font-bold text-red-500 mt-2">
+                    <AlertCircle size={14} />
+                    {disabledReason}
+                </div>
+            )}
+
+            {selected && !disabled && (
                 <div className="absolute bottom-5 left-5 flex items-center gap-1.5 text-xs font-bold text-blue-800 uppercase tracking-wide">
                     <Check size={14} strokeWidth={3} />
                     {type === 'radio' ? 'Selected' : 'Added'}
@@ -208,17 +219,22 @@ export default function Configurator() {
                             onToggle={() => { }}
                         >
                             <div className="grid grid-cols-1 gap-4">
-                                {modules.filter(m => m.type === 'module').map(mod => (
-                                    <OptionCard
-                                        key={mod.id}
-                                        title={mod.name}
-                                        price={mod.price}
-                                        description={mod.description}
-                                        selected={selectedModules.has(mod.id)}
-                                        onClick={() => toggleModule(mod.id)}
-                                        type="checkbox"
-                                    />
-                                ))}
+                                {modules.filter(m => m.type === 'module').map(mod => {
+                                    const { valid, reason } = checkCompatibility(mod);
+                                    return (
+                                        <OptionCard
+                                            key={mod.id}
+                                            title={mod.name}
+                                            price={mod.price}
+                                            description={mod.description}
+                                            selected={selectedModules.has(mod.id)}
+                                            onClick={() => toggleModule(mod.id)}
+                                            type="checkbox"
+                                            disabled={!valid && !selectedModules.has(mod.id)} // Don't disable if already selected (allows unselecting)
+                                            disabledReason={reason}
+                                        />
+                                    );
+                                })}
                             </div>
                         </Section>
 
