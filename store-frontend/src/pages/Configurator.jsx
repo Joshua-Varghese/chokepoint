@@ -40,7 +40,14 @@ export default function Configurator() {
                 // For now, fetch all non-base items.
                 const q = query(collection(db, 'products'), where('type', '!=', 'base'));
                 const modulesSnap = await getDocs(q);
-                setModules(modulesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                let fetchedModules = modulesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Filter by Whitelist if exists
+                if (data.compatibleModules && data.compatibleModules.length > 0) {
+                    fetchedModules = fetchedModules.filter(m => data.compatibleModules.includes(m.id));
+                }
+
+                setModules(fetchedModules);
 
             } catch (e) {
                 console.error(e);

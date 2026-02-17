@@ -30,10 +30,12 @@ function App() {
 
         {/* content */}
         <main>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/configure/:id" element={<Configurator />} />
-          </Routes>
+          <main>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/configure/:id" element={<Configurator />} />
+            </Routes>
+          </main>
         </main>
 
         {/* Footer */}

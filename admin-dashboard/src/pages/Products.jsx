@@ -38,7 +38,7 @@ export default function Products() {
     const [formData, setFormData] = useState({
         name: '', price: '', stock: '', category: 'monitors',
         type: 'module', imageUrl: '',
-        slots: [], specs: {}, constraints: {}
+        slots: [], compatibleModules: [], specs: {}, constraints: {}
     });
 
     const fetchData = async () => {
@@ -66,6 +66,7 @@ export default function Products() {
             type: product.type || 'module',
             imageUrl: product.imageUrl || '',
             slots: product.slots || [],
+            compatibleModules: product.compatibleModules || [],
             specs: product.specs || {},
             constraints: product.constraints || {}
         });
@@ -97,7 +98,8 @@ export default function Products() {
 
                 // Base Station Logic
                 ...(formData.type === 'base' && {
-                    slots: formData.slots || []
+                    slots: formData.slots || [],
+                    compatibleModules: formData.compatibleModules || []
                 }),
 
                 // Module Logic
@@ -219,7 +221,7 @@ export default function Products() {
                                     value={formData.type || 'module'}
                                     onChange={e => setFormData({ ...formData, type: e.target.value })}
                                 >
-                                    <option value="base">Base Station (Hub)</option>
+                                    <option value="base">Platform (Hub)</option>
                                     <option value="module">Sensor / Module</option>
                                     <option value="accessory">Accessory (Power/Antenna)</option>
                                 </select>
@@ -228,37 +230,79 @@ export default function Products() {
                             <hr style={{ borderColor: 'var(--border)' }} />
 
                             {/* CONDITIONAL: Base Station Slots */}
+                            {/* CONDITIONAL: Base Station / Platform Logic */}
                             {formData.type === 'base' && (
-                                <div>
-                                    <label className="label" style={{ fontWeight: 'bold' }}>Available Port / Slots</label>
-                                    <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.5rem' }}>Define what can be plugged into this unit.</p>
+                                <>
+                                    {/* 1. Whitelist: Supported Accessories */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <label className="label" style={{ fontWeight: 'bold' }}>Supported Accessories (Whitelist)</label>
+                                        <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.5rem' }}>
+                                            Select which modules are valid for this platform.
+                                        </p>
 
-                                    {(formData.slots || []).map((slot, idx) => (
-                                        <SlotRow
-                                            key={idx}
-                                            slot={slot}
-                                            onChange={(k, v) => {
-                                                const newSlots = [...(formData.slots || [])];
-                                                newSlots[idx][k] = v;
-                                                setFormData({ ...formData, slots: newSlots });
-                                            }}
-                                            onRemove={() => {
-                                                const newSlots = formData.slots.filter((_, i) => i !== idx);
-                                                setFormData({ ...formData, slots: newSlots });
-                                            }}
-                                        />
-                                    ))}
-                                    <button
-                                        type="button"
-                                        className="btn btn-outline"
-                                        onClick={() => setFormData({
-                                            ...formData,
-                                            slots: [...(formData.slots || []), { id: `slot_${(formData.slots?.length || 0) + 1}`, type: 'uart' }]
-                                        })}
-                                    >
-                                        <Plus size={14} /> Add Slot
-                                    </button>
-                                </div>
+                                        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #e4e4e7', borderRadius: '6px', padding: '0.5rem' }}>
+                                            {products.filter(p => p.type !== 'base' && p.id !== editingId).map(p => (
+                                                <label key={p.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.25rem 0', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(formData.compatibleModules || []).includes(p.id)}
+                                                        onChange={e => {
+                                                            const current = formData.compatibleModules || [];
+                                                            if (e.target.checked) {
+                                                                setFormData({ ...formData, compatibleModules: [...current, p.id] });
+                                                            } else {
+                                                                setFormData({ ...formData, compatibleModules: current.filter(id => id !== p.id) });
+                                                            }
+                                                        }}
+                                                    />
+                                                    <span style={{ fontSize: '0.9rem' }}>{p.name}</span>
+                                                    <span style={{ fontSize: '0.75rem', color: '#999', marginLeft: 'auto' }}>{p.type}</span>
+                                                </label>
+                                            ))}
+                                            {products.filter(p => p.type !== 'base').length === 0 && (
+                                                <div style={{ padding: '1rem', textAlign: 'center', color: '#999', fontSize: '0.8rem' }}>
+                                                    No accessories found. Creates some Modules first!
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <hr style={{ borderColor: 'var(--border)', marginBottom: '1.5rem' }} />
+
+                                    {/* 2. Physical Limits (Slots) */}
+                                    <div>
+                                        <label className="label" style={{ fontWeight: 'bold' }}>Physical Connectivity Limits</label>
+                                        <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.5rem' }}>
+                                            Define the actual hardware ports available (e.g., 2 UART ports).
+                                        </p>
+
+                                        {(formData.slots || []).map((slot, idx) => (
+                                            <SlotRow
+                                                key={idx}
+                                                slot={slot}
+                                                onChange={(k, v) => {
+                                                    const newSlots = [...(formData.slots || [])];
+                                                    newSlots[idx][k] = v;
+                                                    setFormData({ ...formData, slots: newSlots });
+                                                }}
+                                                onRemove={() => {
+                                                    const newSlots = formData.slots.filter((_, i) => i !== idx);
+                                                    setFormData({ ...formData, slots: newSlots });
+                                                }}
+                                            />
+                                        ))}
+                                        <button
+                                            type="button"
+                                            className="btn btn-outline"
+                                            onClick={() => setFormData({
+                                                ...formData,
+                                                slots: [...(formData.slots || []), { id: `slot_${(formData.slots?.length || 0) + 1}`, type: 'uart' }]
+                                            })}
+                                        >
+                                            <Plus size={14} /> Add Port Limit
+                                        </button>
+                                    </div>
+                                </>
                             )}
 
                             {/* CONDITIONAL: Module Requirements */}
