@@ -12,6 +12,13 @@ import { ArrowRight, Wind, ShieldCheck, Activity } from 'lucide-react';
 export default function Home() {
     const [platforms, setPlatforms] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState('All');
+
+    // Filter Logic
+    const filteredPlatforms = platforms.filter(p => {
+        if (activeFilter === 'All') return true;
+        return p.tags && p.tags.includes(activeFilter);
+    });
 
     // Map State
     const [activeCity, setActiveCity] = useState({ name: 'Beijing', lat: 39.9042, lng: 116.4074, aqi: 152, level: 'Unhealthy' });
@@ -175,18 +182,34 @@ export default function Home() {
             {/* 3. FEATURED PRODUCTS GRID */}
             <section id="products" className="py-24 bg-gray-50">
                 <div className="max-w-7xl mx-auto px-6">
-                    <div className="text-center mb-16">
+                    <div className="text-center mb-12">
                         <h2 className="text-4xl font-bold text-gray-900 mb-4">Choose Your ChokeUnit</h2>
-                        <p className="text-gray-600 max-w-2xl mx-auto">
+                        <p className="text-gray-600 max-w-2xl mx-auto mb-8">
                             Start with a base unit and customize it with industrial-grade sensors and power modules.
                         </p>
+
+                        {/* Category Filter */}
+                        <div className="flex flex-wrap justify-center gap-2">
+                            {['All', 'Personal', 'Commercial', 'Industrial'].map(filter => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setActiveFilter(filter)}
+                                    className={`px-6 py-2 rounded-full text-sm font-bold transition-all border ${activeFilter === filter
+                                        ? 'bg-black text-white border-black'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {filter}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     {loading ? (
                         <div className="text-center py-20">Loading Systems...</div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {platforms.map(platform => (
+                            {filteredPlatforms.map(platform => (
                                 <div key={platform.id} className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1">
                                     <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
                                         <img
@@ -201,11 +224,23 @@ export default function Home() {
                                     <div className="p-8">
                                         <div className="flex justify-between items-start mb-4">
                                             <h3 className="text-xl font-bold text-gray-900">{platform.name}</h3>
-                                            <span className="text-lg font-bold text-blue-600">₹{platform.price}</span>
+                                            <span className="text-lg font-bold text-blue-600">₹{platform.price.toLocaleString()}</span>
                                         </div>
                                         <p className="text-gray-500 text-sm mb-6 line-clamp-2">
                                             {platform.description || "High-performance base station capable of supporting multiple sensor arrays."}
                                         </p>
+
+                                        {/* Tags Display */}
+                                        <div className="flex flex-wrap gap-2 mb-6">
+                                            {platform.tags && platform.tags.map(tag => (
+                                                <span key={tag} className={`text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border ${tag === 'Industrial' ? 'bg-slate-800 text-white border-slate-800' :
+                                                    tag === 'Commercial' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                                                        'bg-gray-100 text-gray-600 border-gray-200'
+                                                    }`}>
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
 
                                         <div className="space-y-3 mb-8">
                                             {/* Feature Pills */}
