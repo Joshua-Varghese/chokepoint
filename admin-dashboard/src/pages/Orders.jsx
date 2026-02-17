@@ -9,6 +9,7 @@ export default function Orders() {
     const [loading, setLoading] = useState(true);
     const [expandedOrder, setExpandedOrder] = useState(null);
     const [filterStatus, setFilterStatus] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -45,9 +46,17 @@ export default function Orders() {
         }
     };
 
-    const filteredOrders = filterStatus === 'all'
-        ? orders
-        : orders.filter(order => order.status === filterStatus);
+    const filteredOrders = orders.filter(order => {
+        const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
+        const matchesSearch = searchTerm === '' ||
+            order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.paymentId && order.paymentId.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        return matchesStatus && matchesSearch;
+    });
 
     if (loading) {
         return (
@@ -63,6 +72,16 @@ export default function Orders() {
                 <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
 
                 <div className="flex gap-2">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input
+                            type="text"
+                            placeholder="Search orders..."
+                            className="input input-sm pl-9 border border-gray-300 rounded-lg"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                     <select
                         className="select select-bordered select-sm"
                         value={filterStatus}
