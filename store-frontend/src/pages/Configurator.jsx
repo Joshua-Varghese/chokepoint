@@ -229,7 +229,7 @@ export default function Configurator() {
                         </div>
                     )}
                 </div>
-                <div className="text-right whitespace-nowrap">
+                <div className={`text-right whitespace-nowrap ${selected ? 'mr-8' : ''}`}>
                     <span className={`text-sm font-bold ${selected ? 'text-blue-700' : 'text-gray-700'}`}>
                         {price === 0 ? 'Included' : `+₹${price.toLocaleString()}`}
                     </span>
