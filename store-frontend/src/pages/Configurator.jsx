@@ -15,6 +15,7 @@ export default function Configurator() {
     // Selection State
     const [selectedVariant, setSelectedVariant] = useState(null);
     const [selectedModules, setSelectedModules] = useState(new Set()); // Set of IDs
+    const [openSections, setOpenSections] = useState({ variants: true, sensors: true, power: false });
 
     useEffect(() => {
         async function fetchData() {
@@ -26,10 +27,17 @@ export default function Configurator() {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setBaseProduct({ id: docSnap.id, ...data });
+
                     // Default to first variant
                     if (data.variants && data.variants.length > 0) {
                         setSelectedVariant(data.variants[0]);
                     }
+
+                    // Initialize Default Modules
+                    if (data.defaultModules && data.defaultModules.length > 0) {
+                        setSelectedModules(new Set(data.defaultModules));
+                    }
+
                 } else {
                     navigate('/'); // Invalid ID
                     return;
@@ -38,14 +46,26 @@ export default function Configurator() {
                 // 2. Fetch Compatible Modules (Sensors & Accessories)
                 // In a real app, we'd filter based on compatibility tags.
                 // For now, fetch all non-base items.
-                const q = query(collection(db, 'products'), where('type', '!=', 'base'));
+                // NOTE: Fetching ALL products and filtering locally to catch items with missing 'type' field
+                const q = query(collection(db, 'products'));
                 const modulesSnap = await getDocs(q);
-                let fetchedModules = modulesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                let fetchedModules = modulesSnap.docs
+                    .map(d => {
+                        const data = d.data();
+                        return {
+                            id: d.id,
+                            ...data,
+                            type: data.type || 'module' // DEFAULT TO MODULE IF MISSING
+                        };
+                    })
+                    .filter(m => m.id !== id && m.type !== 'base');
 
                 // Filter by Whitelist if exists
+                /*
                 if (data.compatibleModules && data.compatibleModules.length > 0) {
                     fetchedModules = fetchedModules.filter(m => data.compatibleModules.includes(m.id));
                 }
+                */
 
                 setModules(fetchedModules);
 
@@ -71,7 +91,7 @@ export default function Configurator() {
     // Calculate Total Price
     const calculateTotal = () => {
         if (!baseProduct) return 0;
-        let total = baseProduct.basePrice;
+        let total = baseProduct.basePrice || baseProduct.price; // Fallback to main price if basePrice missing
         if (selectedVariant) total += (selectedVariant.priceMod || 0);
 
         modules.forEach(m => {
@@ -80,6 +100,37 @@ export default function Configurator() {
             }
         });
         return total;
+    };
+
+    const checkCompatibility = (mod) => {
+        // 1. Check if incompatible with any SELECTED modules
+        if (mod.constraints?.incompatible_with) {
+            for (const badId of mod.constraints.incompatible_with) {
+                if (selectedModules.has(badId)) {
+                    const badItem = modules.find(m => m.id === badId);
+                    return { valid: false, reason: `Incompatible with ${badItem?.name || 'selection'}` };
+                }
+            }
+        }
+
+        // 2. Check if any SELECTED module is incompatible with THIS module
+        for (const selectedId of selectedModules) {
+            const selectedMod = modules.find(m => m.id === selectedId);
+            if (selectedMod?.constraints?.incompatible_with?.includes(mod.id)) {
+                return { valid: false, reason: `Incompatible with ${selectedMod.name}` };
+            }
+        }
+
+        // 3. Check Slot Requirements (Simple existence check)
+        if (mod.specs?.requires_slot_type) {
+            const reqType = mod.specs.requires_slot_type;
+            const hasSlot = baseProduct.slots?.some(s => s.type === reqType);
+            if (!hasSlot && reqType !== 'power') { // Ignore power for now as it's not always in slots
+                return { valid: false, reason: `Requires ${reqType.toUpperCase()} port` };
+            }
+        }
+
+        return { valid: true };
     };
 
     if (loading) return <div className="min-h-screen flex items-center justify-center">Loading Configurator...</div>;
@@ -107,14 +158,14 @@ export default function Configurator() {
             </button>
 
             {isOpen && (
-                <div className="mt-6 animate-in slide-in-from-top-2 duration-200">
+                <div className="mt-6">
                     {children}
                 </div>
             )}
         </div>
     );
 
-    const OptionCard = ({ title, price, description, selected, onClick, type = 'radio', disabled, disabledReason }) => (
+    const OptionCard = ({ title, price, description, selected, onClick, type = 'radio', disabled, disabledReason, tags }) => (
         <div
             onClick={!disabled ? onClick : undefined}
             className={`
@@ -130,7 +181,22 @@ export default function Configurator() {
             `}
         >
             <div className="flex justify-between items-start mb-2">
-                <span className={`font-bold ${selected ? 'text-blue-900' : 'text-gray-900'}`}>{title}</span>
+                <div className="flex flex-col gap-1">
+                    <span className={`font-bold ${selected ? 'text-blue-900' : 'text-gray-900'}`}>{title}</span>
+                    {/* Tags */}
+                    {tags && tags.length > 0 && (
+                        <div className="flex gap-1 flex-wrap">
+                            {tags.map(tag => (
+                                <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border ${tag === 'Industrial' ? 'bg-slate-800 text-white border-slate-800' :
+                                    tag === 'Commercial' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                                        'bg-gray-100 text-gray-600 border-gray-200'
+                                    }`}>
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <span className="text-sm font-medium">
                     {price === 0 ? 'Included' : `+₹${price.toLocaleString()}`}
                 </span>
@@ -177,7 +243,17 @@ export default function Configurator() {
                             <div className="flex justify-between items-end mb-4">
                                 <div>
                                     <h2 className="text-2xl font-bold">{baseProduct.name}</h2>
-                                    <p className="text-gray-500 text-sm mt-1">Custom Configuration</p>
+                                    <div className="flex gap-2 mt-1 mb-2">
+                                        <span className="text-gray-500 text-sm">Custom Configuration</span>
+                                        {baseProduct.tags?.map(tag => (
+                                            <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border self-center ${tag === 'Industrial' ? 'bg-slate-800 text-white border-slate-800' :
+                                                tag === 'Commercial' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                                                    'bg-gray-100 text-gray-600 border-gray-200'
+                                                }`}>
+                                                {tag}
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="text-right">
                                     <div className="text-sm text-gray-500 mb-1">Total Price</div>
@@ -201,8 +277,8 @@ export default function Configurator() {
                         {/* 1. Base Variant */}
                         <Section
                             title="Platform Edition"
-                            isOpen={true}
-                            onToggle={() => { }}
+                            isOpen={openSections.variants}
+                            onToggle={() => setOpenSections(prev => ({ ...prev, variants: !prev.variants }))}
                             required
                         >
                             <div className="grid grid-cols-1 gap-4">
@@ -222,8 +298,8 @@ export default function Configurator() {
                         {/* 2. Sensors */}
                         <Section
                             title="Sensors & Modules"
-                            isOpen={true}
-                            onToggle={() => { }}
+                            isOpen={openSections.sensors}
+                            onToggle={() => setOpenSections(prev => ({ ...prev, sensors: !prev.sensors }))}
                         >
                             <div className="grid grid-cols-1 gap-4">
                                 {modules.filter(m => m.type === 'module').map(mod => {
@@ -234,6 +310,7 @@ export default function Configurator() {
                                             title={mod.name}
                                             price={mod.price}
                                             description={mod.description}
+                                            tags={mod.tags}
                                             selected={selectedModules.has(mod.id)}
                                             onClick={() => toggleModule(mod.id)}
                                             type="checkbox"
@@ -248,8 +325,8 @@ export default function Configurator() {
                         {/* 3. Power */}
                         <Section
                             title="Power & Accessories"
-                            isOpen={true}
-                            onToggle={() => { }}
+                            isOpen={openSections.power}
+                            onToggle={() => setOpenSections(prev => ({ ...prev, power: !prev.power }))}
                         >
                             <div className="grid grid-cols-1 gap-4">
                                 {modules.filter(m => m.type === 'accessory').map(mod => (
@@ -258,6 +335,7 @@ export default function Configurator() {
                                         title={mod.name}
                                         price={mod.price}
                                         description={mod.description}
+                                        tags={mod.tags}
                                         selected={selectedModules.has(mod.id)}
                                         onClick={() => toggleModule(mod.id)}
                                         type="checkbox"

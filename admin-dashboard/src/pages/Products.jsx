@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config';
-import { Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // Helper for Slot Row
@@ -29,6 +29,28 @@ const SlotRow = ({ slot, onChange, onRemove }) => (
     </div>
 );
 
+// Helper for Variant Row
+const VariantRow = ({ variant, onChange, onRemove }) => (
+    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <input
+            placeholder="Variant Name (e.g. Standard ESP32)"
+            className="input"
+            value={variant.name}
+            onChange={e => onChange('name', e.target.value)}
+            style={{ flex: 2 }}
+        />
+        <input
+            type="number"
+            placeholder="Price Mod (+₹)"
+            className="input"
+            value={variant.priceMod}
+            onChange={e => onChange('priceMod', Number(e.target.value))}
+            style={{ flex: 1 }}
+        />
+        <button type="button" onClick={onRemove} style={{ color: 'red' }}><Trash2 size={16} /></button>
+    </div>
+);
+
 export default function Products() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -39,7 +61,7 @@ export default function Products() {
     const [formData, setFormData] = useState({
         name: '', price: '', stock: '', category: 'monitors',
         type: 'module', imageUrl: '',
-        slots: [], compatibleModules: [], defaultModules: [], tags: [], specs: {}, constraints: {}
+        slots: [], compatibleModules: [], defaultModules: [], tags: [], variants: [], specs: {}, constraints: {}
     });
 
     const fetchData = async () => {
@@ -69,6 +91,7 @@ export default function Products() {
             slots: product.slots || [],
             compatibleModules: product.compatibleModules || [],
             defaultModules: product.defaultModules || [],
+            variants: product.variants || [],
             tags: product.tags || [],
             specs: product.specs || {},
             constraints: product.constraints || {}
@@ -77,14 +100,23 @@ export default function Products() {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this product?")) return;
+    const [deleteId, setDeleteId] = useState(null);
+
+    const handleDeleteClick = (id) => {
+        setDeleteId(id);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteId) return;
         try {
-            await deleteDoc(doc(db, 'products', id));
+            await deleteDoc(doc(db, 'products', deleteId));
+            toast.success("Product Deleted Successfully");
             fetchData();
         } catch (error) {
             console.error("Error deleting product:", error);
             toast.error("Failed to delete product.");
+        } finally {
+            setDeleteId(null);
         }
     };
 
@@ -104,7 +136,8 @@ export default function Products() {
                 // Base Station Logic
                 ...(formData.type === 'base' && {
                     slots: formData.slots || [],
-                    compatibleModules: formData.compatibleModules || []
+                    compatibleModules: formData.compatibleModules || [],
+                    variants: formData.variants || []
                 }),
 
                 // Module Logic
@@ -140,7 +173,7 @@ export default function Products() {
     const closeModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData({ name: '', price: '', stock: '', category: 'monitors', type: 'module', slots: [], specs: {}, constraints: {} });
+        setFormData({ name: '', price: '', stock: '', category: 'monitors', type: 'module', slots: [], variants: [], specs: {}, constraints: {} });
     };
 
     return (
@@ -159,7 +192,7 @@ export default function Products() {
                             <th>Name</th>
                             <th>Price</th>
                             <th>Stock</th>
-                            <th>Category</th>
+                            <th>Type</th>
                             <th style={{ textAlign: 'right' }}>Actions</th>
                         </tr>
                     </thead>
@@ -171,12 +204,20 @@ export default function Products() {
                                 <td>{p.name}</td>
                                 <td>₹{p.price}</td>
                                 <td>{p.stock !== undefined ? p.stock : 'N/A'}</td>
-                                <td>{p.category}</td>
+                                <td>
+                                    <span style={{
+                                        padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
+                                        background: p.type === 'base' ? '#e0f2fe' : p.type === 'module' ? '#f0fdf4' : '#fefce8',
+                                        color: p.type === 'base' ? '#0369a1' : p.type === 'module' ? '#15803d' : '#854d0e'
+                                    }}>
+                                        {p.type === 'base' ? 'Platform' : p.type === 'module' ? 'Sensor' : 'Accessory'}
+                                    </span>
+                                </td>
                                 <td style={{ textAlign: 'right' }}>
                                     <button onClick={() => handleEdit(p)} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', marginRight: '0.5rem' }}>
                                         <Pencil size={16} />
                                     </button>
-                                    <button onClick={() => handleDelete(p.id)} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', color: 'var(--danger)' }}>
+                                    <button onClick={() => handleDeleteClick(p.id)} className="btn btn-ghost" style={{ padding: '0.25rem 0.5rem', color: 'var(--danger)' }}>
                                         <Trash2 size={16} />
                                     </button>
                                 </td>
@@ -238,6 +279,41 @@ export default function Products() {
                             {/* CONDITIONAL: Base Station / Platform Logic */}
                             {formData.type === 'base' && (
                                 <>
+                                    {/* 0. Platform Variants */}
+                                    <div style={{ marginBottom: '1.5rem', background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                        <label className="label" style={{ fontWeight: 'bold', color: '#0f172a' }}>Platform Editions (Variants)</label>
+                                        <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                                            Define the core versions of this platform (e.g., Standard ESP32, High-Power, Industrial).
+                                        </p>
+
+                                        {(formData.variants || []).map((variant, idx) => (
+                                            <VariantRow
+                                                key={idx}
+                                                variant={variant}
+                                                onChange={(k, v) => {
+                                                    const newVariants = [...(formData.variants || [])];
+                                                    newVariants[idx][k] = v;
+                                                    setFormData({ ...formData, variants: newVariants });
+                                                }}
+                                                onRemove={() => {
+                                                    const newVariants = formData.variants.filter((_, i) => i !== idx);
+                                                    setFormData({ ...formData, variants: newVariants });
+                                                }}
+                                            />
+                                        ))}
+                                        <button
+                                            type="button"
+                                            className="btn btn-outline"
+                                            style={{ background: 'white' }}
+                                            onClick={() => setFormData({
+                                                ...formData,
+                                                variants: [...(formData.variants || []), { id: `var_${Date.now()}`, name: '', priceMod: 0 }]
+                                            })}
+                                        >
+                                            <Plus size={14} /> Add Edition
+                                        </button>
+                                    </div>
+
                                     {/* 1. Whitelist: Supported Accessories */}
                                     <div style={{ marginBottom: '1.5rem' }}>
                                         <label className="label" style={{ fontWeight: 'bold' }}>Supported Accessories (Whitelist)</label>
@@ -479,6 +555,42 @@ export default function Products() {
                     </div>
                 </div>
             )}
+
+            {/* DELETE CONFIRMATION MODAL */}
+            {deleteId && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1100
+                }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '400px', background: '#fff', padding: '1.5rem', textAlign: 'center' }}>
+                        <div style={{ marginBottom: '1rem', color: 'var(--danger)', display: 'flex', justifyContent: 'center' }}>
+                            <AlertCircle size={48} />
+                        </div>
+                        <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Delete Product?</h2>
+                        <p style={{ color: '#666', marginBottom: '1.5rem' }}>
+                            Are you sure you want to delete this product? This action cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => setDeleteId(null)}
+                                className="btn btn-ghost"
+                                style={{ border: '1px solid #e4e4e7' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                className="btn btn-primary"
+                                style={{ background: 'var(--danger)', border: 'none' }}
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
