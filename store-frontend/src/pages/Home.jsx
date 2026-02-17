@@ -13,6 +13,26 @@ export default function Home() {
     const [platforms, setPlatforms] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Map State
+    const [activeCity, setActiveCity] = useState({ name: 'Beijing', lat: 39.9042, lng: 116.4074, aqi: 152, level: 'Unhealthy' });
+
+    const CITIES = [
+        { name: 'Beijing', lat: 39.9042, lng: 116.4074, aqi: 152, level: 'Unhealthy' },
+        { name: 'New York', lat: 40.7128, lng: -74.0060, aqi: 45, level: 'Good' },
+        { name: 'London', lat: 51.5074, lng: -0.1278, aqi: 68, level: 'Moderate' },
+        { name: 'New Delhi', lat: 28.6139, lng: 77.2090, aqi: 305, level: 'Hazardous' },
+        { name: 'Tokyo', lat: 35.6762, lng: 139.6503, aqi: 42, level: 'Good' }
+    ];
+
+    // Leaflet Helper to fly to coordinates
+    function MapController({ center }) {
+        const map = useMap();
+        useEffect(() => {
+            map.setView(center, 10, { animate: true, duration: 2 });
+        }, [center, map]);
+        return null;
+    }
+
     useEffect(() => {
         async function fetchPlatforms() {
             try {
@@ -45,10 +65,8 @@ export default function Home() {
                 </div>
 
                 <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gray-700 bg-black/50 backdrop-blur-md mb-6 animate-fade-in-up">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        <span className="text-sm font-medium text-gray-300">System Online v2.4</span>
-                    </div>
+                    {/* Badge Removed */}
+
                     <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400">
                         Breathe The Future.
                     </h1>
@@ -65,7 +83,7 @@ export default function Home() {
                             }}
                             className="px-8 py-4 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-2 group"
                         >
-                            Deploy System
+                            Configure ChokeUnit
                             <ArrowRight className="group-hover:translate-x-1 transition-transform" />
                         </Link>
                         <a
@@ -89,16 +107,28 @@ export default function Home() {
                             </h2>
                             <p className="text-gray-400">Real-time Air Quality Index (AQI) monitoring network.</p>
                         </div>
-                        <div className="flex gap-4 text-sm text-gray-500">
-                            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-green-500 rounded-full" /> Good</span>
-                            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-500 rounded-full" /> Moderate</span>
-                            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-full" /> Hazardous</span>
+
+                        {/* City Selector */}
+                        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
+                            {CITIES.map(city => (
+                                <button
+                                    key={city.name}
+                                    onClick={() => setActiveCity(city)}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${activeCity.name === city.name
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
+                                        }`}
+                                >
+                                    {city.name}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
                     <div className="h-[500px] w-full rounded-2xl overflow-hidden border border-zinc-700 shadow-2xl relative">
                         {/* Leaflet Map */}
-                        <MapContainer center={[20, 0]} zoom={2} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#1a1a1a' }}>
+                        <MapContainer center={[activeCity.lat, activeCity.lng]} zoom={10} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#1a1a1a' }}>
+                            <MapController center={[activeCity.lat, activeCity.lng]} />
                             {/* Dark Base Map */}
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -112,20 +142,29 @@ export default function Home() {
                         </MapContainer>
 
                         {/* Overlay Card */}
-                        <div className="absolute top-6 left-6 z-[1000] bg-black/80 backdrop-blur-md p-6 rounded-xl border border-zinc-700 max-w-xs">
-                            <h4 className="text-white font-bold mb-2">Live Analysis</h4>
-                            <div className="space-y-3">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-400">Beijing</span>
-                                    <span className="text-red-400 font-mono">152 AQI</span>
+                        <div className="absolute top-6 right-6 z-[500] bg-black/80 backdrop-blur-md p-6 rounded-xl border border-zinc-700 w-64 shadow-2xl">
+                            <h4 className="text-white font-bold mb-4 flex items-center justify-between">
+                                Live Analysis
+                                <span className="text-xs font-normal text-gray-400 animate-pulse">● LIVE</span>
+                            </h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Location</div>
+                                    <div className="text-xl text-white font-mono">{activeCity.name}</div>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-400">New York</span>
-                                    <span className="text-green-400 font-mono">45 AQI</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-400">New Delhi</span>
-                                    <span className="text-purple-400 font-mono">305 AQI</span>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">AQI</div>
+                                        <div className={`text-2xl font-bold font-mono ${activeCity.aqi > 150 ? 'text-red-500' :
+                                            activeCity.aqi > 100 ? 'text-yellow-500' : 'text-green-500'
+                                            }`}>
+                                            {activeCity.aqi}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Status</div>
+                                        <div className="text-sm text-gray-300 font-medium mt-1">{activeCity.level}</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -137,7 +176,7 @@ export default function Home() {
             <section id="products" className="py-24 bg-gray-50">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="text-center mb-16">
-                        <h2 className="text-4xl font-bold text-gray-900 mb-4">Choose Your Platform</h2>
+                        <h2 className="text-4xl font-bold text-gray-900 mb-4">Choose Your ChokeUnit</h2>
                         <p className="text-gray-600 max-w-2xl mx-auto">
                             Start with a base unit and customize it with industrial-grade sensors and power modules.
                         </p>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { Plus, X, Pencil, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // Helper for Slot Row
 const SlotRow = ({ slot, onChange, onRemove }) => (
@@ -38,7 +39,7 @@ export default function Products() {
     const [formData, setFormData] = useState({
         name: '', price: '', stock: '', category: 'monitors',
         type: 'module', imageUrl: '',
-        slots: [], compatibleModules: [], specs: {}, constraints: {}
+        slots: [], compatibleModules: [], defaultModules: [], tags: [], specs: {}, constraints: {}
     });
 
     const fetchData = async () => {
@@ -67,6 +68,8 @@ export default function Products() {
             imageUrl: product.imageUrl || '',
             slots: product.slots || [],
             compatibleModules: product.compatibleModules || [],
+            defaultModules: product.defaultModules || [],
+            tags: product.tags || [],
             specs: product.specs || {},
             constraints: product.constraints || {}
         });
@@ -81,7 +84,7 @@ export default function Products() {
             fetchData();
         } catch (error) {
             console.error("Error deleting product:", error);
-            alert("Failed to delete product");
+            toast.error("Failed to delete product.");
         }
     };
 
@@ -90,11 +93,13 @@ export default function Products() {
         try {
             const productData = {
                 name: formData.name,
-                price: parseFloat(formData.price),
-                stock: parseInt(formData.stock),
+                price: Number(formData.price),
+                stock: Number(formData.stock),
                 category: formData.category,
-                type: formData.type, // 'base' | 'module'
+                type: formData.type,
                 imageUrl: formData.imageUrl || 'https://via.placeholder.com/150',
+                tags: formData.tags || [],
+                updatedAt: serverTimestamp(),
 
                 // Base Station Logic
                 ...(formData.type === 'base' && {
@@ -116,19 +121,19 @@ export default function Products() {
 
             if (editingId) {
                 await updateDoc(doc(db, 'products', editingId), productData);
-                alert("Product Updated!");
+                toast.success("Product Updated Successfully!");
             } else {
                 await addDoc(collection(db, 'products'), {
                     ...productData,
                     createdAt: serverTimestamp()
                 });
-                alert("Product Added!");
+                toast.success("Product Added Successfully!");
             }
             closeModal();
             fetchData();
         } catch (error) {
             console.error("Error saving product:", error);
-            alert("Failed to save product");
+            toast.error("Failed to save product.");
         }
     };
 
@@ -242,22 +247,48 @@ export default function Products() {
 
                                         <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #e4e4e7', borderRadius: '6px', padding: '0.5rem' }}>
                                             {products.filter(p => p.type !== 'base' && p.id !== editingId).map(p => (
-                                                <label key={p.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', padding: '0.25rem 0', cursor: 'pointer' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={(formData.compatibleModules || []).includes(p.id)}
-                                                        onChange={e => {
-                                                            const current = formData.compatibleModules || [];
-                                                            if (e.target.checked) {
-                                                                setFormData({ ...formData, compatibleModules: [...current, p.id] });
-                                                            } else {
-                                                                setFormData({ ...formData, compatibleModules: current.filter(id => id !== p.id) });
-                                                            }
-                                                        }}
-                                                    />
-                                                    <span style={{ fontSize: '0.9rem' }}>{p.name}</span>
-                                                    <span style={{ fontSize: '0.75rem', color: '#999', marginLeft: 'auto' }}>{p.type}</span>
-                                                </label>
+                                                <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.25rem 0' }}>
+                                                    <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', cursor: 'pointer' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={(formData.compatibleModules || []).includes(p.id)}
+                                                            onChange={e => {
+                                                                const current = formData.compatibleModules || [];
+                                                                if (e.target.checked) {
+                                                                    setFormData({ ...formData, compatibleModules: [...current, p.id] });
+                                                                } else {
+                                                                    // Also remove from defaults if unchecked
+                                                                    const currentDefaults = formData.defaultModules || [];
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        compatibleModules: current.filter(id => id !== p.id),
+                                                                        defaultModules: currentDefaults.filter(id => id !== p.id)
+                                                                    });
+                                                                }
+                                                            }}
+                                                        />
+                                                        <span style={{ fontSize: '0.9rem' }}>{p.name}</span>
+                                                    </label>
+
+                                                    {/* Default Toggle (Only if compatible) */}
+                                                    {(formData.compatibleModules || []).includes(p.id) && (
+                                                        <label style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', cursor: 'pointer', fontSize: '0.75rem', color: '#666' }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={(formData.defaultModules || []).includes(p.id)}
+                                                                onChange={e => {
+                                                                    const currentDefaults = formData.defaultModules || [];
+                                                                    if (e.target.checked) {
+                                                                        setFormData({ ...formData, defaultModules: [...currentDefaults, p.id] });
+                                                                    } else {
+                                                                        setFormData({ ...formData, defaultModules: currentDefaults.filter(id => id !== p.id) });
+                                                                    }
+                                                                }}
+                                                            />
+                                                            Pre-select Default?
+                                                        </label>
+                                                    )}
+                                                </div>
                                             ))}
                                             {products.filter(p => p.type !== 'base').length === 0 && (
                                                 <div style={{ padding: '1rem', textAlign: 'center', color: '#999', fontSize: '0.8rem' }}>
@@ -304,6 +335,40 @@ export default function Products() {
                                     </div>
                                 </>
                             )}
+
+                            {/* Usage Tags (All Products) */}
+                            <div style={{ marginTop: '1.5rem', background: '#f0f9ff', padding: '1rem', borderRadius: '8px' }}>
+                                <label className="label" style={{ fontWeight: 'bold', color: '#0369a1' }}>Usage Tags</label>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    {['Personal', 'Commercial', 'Industrial'].map(tag => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => {
+                                                const currentTags = formData.tags || [];
+                                                if (currentTags.includes(tag)) {
+                                                    setFormData({ ...formData, tags: currentTags.filter(t => t !== tag) });
+                                                } else {
+                                                    setFormData({ ...formData, tags: [...currentTags, tag] });
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '0.25rem 0.75rem',
+                                                borderRadius: '999px',
+                                                border: '1px solid',
+                                                borderColor: (formData.tags || []).includes(tag) ? '#0284c7' : '#cbd5e1',
+                                                background: (formData.tags || []).includes(tag) ? '#0284c7' : 'white',
+                                                color: (formData.tags || []).includes(tag) ? 'white' : '#64748b',
+                                                fontSize: '0.85rem',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
 
                             {/* CONDITIONAL: Module Requirements */}
                             {formData.type !== 'base' && (
