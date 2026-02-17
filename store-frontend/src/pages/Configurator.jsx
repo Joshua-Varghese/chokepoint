@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase-config';
-import { Check, Plus, AlertCircle, ShoppingCart } from 'lucide-react';
+import { Check, Plus, AlertCircle, ShoppingCart, ChevronDown } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function Configurator() {
@@ -161,30 +161,39 @@ export default function Configurator() {
 
     const totalPrice = calculateTotal();
 
-    const Section = ({ title, isOpen, onToggle, children, required }) => (
-        <div className="border-b border-gray-200 py-6">
+    const Section = ({ title, isOpen, onToggle, children, required, isComplete }) => (
+        <div className="border border-gray-200 rounded-xl overflow-hidden mb-4 bg-white shadow-sm">
             <button
                 onClick={onToggle}
-                className="w-full flex items-center justify-between text-left group"
+                className={`w-full flex items-center justify-between text-left p-6 transition-colors ${isOpen ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
             >
-                <div>
-                    <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                    {isComplete ? (
+                        <div className="bg-green-100 text-green-600 rounded-full p-1">
+                            <Check size={16} strokeWidth={3} />
+                        </div>
+                    ) : (
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold ${required ? 'border-blue-600 text-blue-600' : 'border-gray-300 text-gray-400'}`}>
+                            {required ? '!' : ''}
+                        </div>
+                    )}
+                    <h3 className="text-lg font-bold text-gray-900">
                         {title}
-                        {required && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-normal">Required</span>}
+                        {required && <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">Required</span>}
                     </h3>
                 </div>
-                <div className={`transform transition-transform ${isOpen ? 'rotate-180' : ''}`}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M6 9l6 6 6-6" />
-                    </svg>
+                <div className={`transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''} text-gray-400`}>
+                    <ChevronDown size={20} />
                 </div>
             </button>
 
-            {isOpen && (
-                <div className="mt-6">
-                    {children}
+            <div className={`transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+                <div className="p-6 pt-0 border-t border-gray-100">
+                    <div className="mt-6">
+                        {children}
+                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 
@@ -192,25 +201,25 @@ export default function Configurator() {
         <div
             onClick={!disabled ? onClick : undefined}
             className={`
-                relative p-5 rounded-lg border-2 transition-all
+                relative p-5 rounded-lg border-2 transition-all duration-200
                 ${disabled
                     ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
-                    : 'cursor-pointer hover:shadow-md'
+                    : 'cursor-pointer hover:border-gray-300 hover:shadow-md'
                 }
                 ${selected && !disabled
-                    ? 'border-blue-700 bg-blue-50/10 ring-1 ring-blue-700'
-                    : (!disabled ? 'border-gray-300 hover:border-gray-400' : '')
+                    ? 'border-blue-600 bg-blue-50/30'
+                    : (!disabled ? 'border-gray-200 bg-white' : '')
                 }
             `}
         >
             <div className="flex justify-between items-start mb-2">
-                <div className="flex flex-col gap-1">
-                    <span className={`font-bold ${selected ? 'text-blue-900' : 'text-gray-900'}`}>{title}</span>
+                <div className="flex flex-col gap-1 pr-8">
+                    <span className={`font-bold text-lg ${selected ? 'text-blue-900' : 'text-gray-900'}`}>{title}</span>
                     {/* Tags */}
                     {tags && tags.length > 0 && (
-                        <div className="flex gap-1 flex-wrap">
+                        <div className="flex gap-1 flex-wrap mt-1">
                             {tags.map(tag => (
-                                <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border ${tag === 'Industrial' ? 'bg-slate-800 text-white border-slate-800' :
+                                <span key={tag} className={`text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border ${tag === 'Industrial' ? 'bg-slate-800 text-white border-slate-800' :
                                     tag === 'Commercial' ? 'bg-blue-100 text-blue-800 border-blue-200' :
                                         'bg-gray-100 text-gray-600 border-gray-200'
                                     }`}>
@@ -220,117 +229,170 @@ export default function Configurator() {
                         </div>
                     )}
                 </div>
-                <span className="text-sm font-medium">
-                    {price === 0 ? 'Included' : `+₹${price.toLocaleString()}`}
-                </span>
+                <div className="text-right whitespace-nowrap">
+                    <span className={`text-sm font-bold ${selected ? 'text-blue-700' : 'text-gray-700'}`}>
+                        {price === 0 ? 'Included' : `+₹${price.toLocaleString()}`}
+                    </span>
+                </div>
             </div>
-            <p className="text-sm text-gray-500 mb-4 line-clamp-2">{description}</p>
+            <p className="text-sm text-gray-500 mb-4 leading-relaxed">{description}</p>
 
             {disabled && (
-                <div className="flex items-center gap-2 text-xs font-bold text-red-500 mt-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-red-500 mt-3 bg-red-50 p-2 rounded">
                     <AlertCircle size={14} />
                     {disabledReason}
                 </div>
             )}
 
             {selected && !disabled && (
-                <div className="absolute bottom-5 left-5 flex items-center gap-1.5 text-xs font-bold text-blue-800 uppercase tracking-wide">
-                    <Check size={14} strokeWidth={3} />
-                    {type === 'radio' ? 'Selected' : 'Added'}
+                <div className="absolute top-4 right-4 text-blue-600">
+                    <div className="bg-blue-600 text-white rounded-full p-1">
+                        <Check size={12} strokeWidth={4} />
+                    </div>
                 </div>
             )}
         </div>
     );
 
-
-
     return (
-        <div className="min-h-screen bg-white">
+        <div className="min-h-screen bg-gray-50/50 pb-32 lg:pb-0"> {/* Add padding bottom for mobile sticky bar */}
             <div className="max-w-[1600px] mx-auto">
                 <div className="grid grid-cols-1 lg:grid-cols-12 min-h-screen">
 
-                    {/* LEFT: Visual (Fixed on Desktop) */}
-                    <div className="lg:col-span-7 bg-gray-50 lg:sticky lg:top-0 lg:h-screen p-8 flex flex-col">
-                        <div className="flex-1 flex items-center justify-center p-8 lg:p-16">
-                            <div className="relative w-full max-w-2xl aspect-[16/10]">
+                    {/* LEFT: Visual & Summary (Desktop: Sticky Sidebar, Mobile: Top Image) */}
+                    <div className="lg:col-span-7 bg-white lg:h-screen lg:sticky lg:top-0 border-r border-gray-200 flex flex-col z-10 overflow-hidden">
+
+                        {/* Header / Back Button */}
+                        <div className="p-6 lg:p-8 pb-0 shrink-0">
+                            <button onClick={() => navigate('/')} className="text-sm font-medium text-gray-500 hover:text-black flex items-center gap-2 transition-colors">
+                                &larr; Back to Products
+                            </button>
+                        </div>
+
+                        {/* Main Content Area (Restricted to available height) */}
+                        <div className="flex-1 flex flex-col justify-center p-6 lg:p-8 min-h-0">
+
+                            {/* Product Image (Flex-1 to take available space, object-contain to fit) */}
+                            <div className="flex-1 relative flex items-center justify-center min-h-0 mb-6">
                                 <img
                                     src={baseProduct.imageUrl}
                                     alt={baseProduct.name}
-                                    className="w-full h-full object-contain mix-blend-multiply"
+                                    className="w-full h-full object-contain mix-blend-multiply drop-shadow-xl p-4 max-h-[50vh]"
                                 />
                             </div>
-                        </div>
 
-                        {/* Summary Footer on Left Side */}
-                        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100 hidden lg:block">
-                            <div className="flex justify-between items-end mb-4">
-                                <div>
-                                    <h2 className="text-2xl font-bold">{baseProduct.name}</h2>
-                                    <div className="flex gap-2 mt-1 mb-2">
-                                        <span className="text-gray-500 text-sm">Custom Configuration</span>
-                                        {baseProduct.tags?.map(tag => (
-                                            <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border self-center ${tag === 'Industrial' ? 'bg-slate-800 text-white border-slate-800' :
-                                                tag === 'Commercial' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                                                    'bg-gray-100 text-gray-600 border-gray-200'
-                                                }`}>
-                                                {tag}
-                                            </span>
-                                        ))}
-                                    </div>
+                            {/* Desktop Summary Card (Hidden on Mobile) */}
+                            <div className="hidden lg:block bg-gray-50 rounded-2xl p-6 shadow-sm border border-gray-100 shrink-0">
+                                <div className="mb-4">
+                                    <h2 className="text-2xl font-bold text-gray-900 mb-1">{baseProduct.name}</h2>
+                                    <p className="text-gray-500 text-sm">Custom Configuration</p>
                                 </div>
-                                <div className="text-right">
-                                    <div className="text-sm text-gray-500 mb-1">Total Price</div>
-                                    <div className="text-3xl font-bold">₹{totalPrice.toLocaleString()}</div>
+
+                                {/* Compact Selected Items List */}
+                                <div className="space-y-2 mb-6 text-sm max-h-[120px] overflow-y-auto pr-2 custom-scrollbar">
+                                    {selectedVariant && (
+                                        <div className="flex justify-between items-center group">
+                                            <span className="text-gray-600 font-medium">Platform</span>
+                                            <span className="text-gray-900">{selectedVariant.name}</span>
+                                        </div>
+                                    )}
+                                    {modules.filter(m => selectedModules.has(m.id)).map(m => (
+                                        <div key={m.id} className="flex justify-between items-center group">
+                                            <span className="text-gray-500 truncate mr-4">{m.name}</span>
+                                            <span className="text-gray-900 font-medium whitespace-nowrap">
+                                                {m.price > 0 ? `+₹${m.price.toLocaleString()}` : 'Incl.'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="border-t border-gray-200 pt-4 flex justify-between items-end gap-4">
+                                    <div>
+                                        <div className="text-xs text-gray-400 uppercase tracking-wide font-bold mb-1">Total</div>
+                                        <div className="text-3xl font-bold text-gray-900 tracking-tight">₹{totalPrice.toLocaleString()}</div>
+                                    </div>
+                                    <button
+                                        onClick={handleAddToCart}
+                                        className="bg-black text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center gap-2 shadow-lg shadow-gray-200"
+                                    >
+                                        <ShoppingCart size={18} />
+                                        <span>Add to Cart</span>
+                                    </button>
                                 </div>
                             </div>
-                            <button
-                                onClick={handleAddToCart}
-                                className="w-full bg-blue-700 text-white py-4 rounded-lg font-bold hover:bg-blue-800 transition-colors uppercase tracking-wide text-sm"
-                            >
-                                Add to Cart
-                            </button>
                         </div>
                     </div>
 
                     {/* RIGHT: Scrollable Options */}
-                    <div className="lg:col-span-5 bg-white p-6 lg:p-12 overflow-y-auto">
+                    <div className="lg:col-span-5 bg-gray-50 p-6 lg:p-10">
 
-                        <div className="mb-8 border-b border-gray-200 pb-8">
-                            <h1 className="text-3xl font-bold mb-2">Configure Your System</h1>
-                            <p className="text-gray-500">Customize capability, power, and sensors.</p>
+                        <div className="mb-8 lg:mb-10 lg:pt-8">
+                            <h1 className="text-2xl lg:text-3xl font-bold mb-3 text-gray-900">Build Your Device</h1>
+                            <p className="text-gray-500 leading-relaxed text-sm lg:text-base">
+                                Configure your {baseProduct.name}. All modules are hot-swappable and verified for compatibility.
+                            </p>
                         </div>
 
-                        {/* 1. Base Variant */}
-                        <Section
-                            title="Platform Edition"
-                            isOpen={openSections.variants}
-                            onToggle={() => setOpenSections(prev => ({ ...prev, variants: !prev.variants }))}
-                            required
-                        >
-                            <div className="grid grid-cols-1 gap-4">
-                                {baseProduct.variants?.map(variant => (
-                                    <OptionCard
-                                        key={variant.id}
-                                        title={variant.name}
-                                        price={variant.priceMod}
-                                        description={variant.description || "Standard platform edition."}
-                                        selected={selectedVariant?.id === variant.id}
-                                        onClick={() => setSelectedVariant(variant)}
-                                    />
-                                ))}
-                            </div>
-                        </Section>
+                        <div className="space-y-4"> {/* Accordion Container */}
+                            {/* 1. Base Variant */}
+                            <Section
+                                title="Platform Edition"
+                                isOpen={openSections.variants}
+                                onToggle={() => setOpenSections(prev => ({ ...prev, variants: !prev.variants }))}
+                                required
+                                isComplete={!!selectedVariant}
+                            >
+                                <div className="grid grid-cols-1 gap-3">
+                                    {baseProduct.variants?.map(variant => (
+                                        <OptionCard
+                                            key={variant.id}
+                                            title={variant.name}
+                                            price={variant.priceMod}
+                                            description={variant.description || "Standard platform edition."}
+                                            selected={selectedVariant?.id === variant.id}
+                                            onClick={() => setSelectedVariant(variant)}
+                                        />
+                                    ))}
+                                </div>
+                            </Section>
 
-                        {/* 2. Sensors */}
-                        <Section
-                            title="Sensors & Modules"
-                            isOpen={openSections.sensors}
-                            onToggle={() => setOpenSections(prev => ({ ...prev, sensors: !prev.sensors }))}
-                        >
-                            <div className="grid grid-cols-1 gap-4">
-                                {modules.filter(m => m.type === 'module').map(mod => {
-                                    const { valid, reason } = checkCompatibility(mod);
-                                    return (
+                            {/* 2. Sensors */}
+                            <Section
+                                title="Sensors & Modules"
+                                isOpen={openSections.sensors}
+                                onToggle={() => setOpenSections(prev => ({ ...prev, sensors: !prev.sensors }))}
+                                isComplete={selectedModules.size > 0}
+                            >
+                                <div className="grid grid-cols-1 gap-3">
+                                    {modules.filter(m => m.type === 'module').map(mod => {
+                                        const { valid, reason } = checkCompatibility(mod);
+                                        return (
+                                            <OptionCard
+                                                key={mod.id}
+                                                title={mod.name}
+                                                price={mod.price}
+                                                description={mod.description}
+                                                tags={mod.tags}
+                                                selected={selectedModules.has(mod.id)}
+                                                onClick={() => toggleModule(mod.id)}
+                                                type="checkbox"
+                                                disabled={!valid && !selectedModules.has(mod.id)}
+                                                disabledReason={reason}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            </Section>
+
+                            {/* 3. Power */}
+                            <Section
+                                title="Power & Accessories"
+                                isOpen={openSections.power}
+                                onToggle={() => setOpenSections(prev => ({ ...prev, power: !prev.power }))}
+                                isComplete={false}
+                            >
+                                <div className="grid grid-cols-1 gap-3">
+                                    {modules.filter(m => m.type === 'accessory').map(mod => (
                                         <OptionCard
                                             key={mod.id}
                                             title={mod.name}
@@ -340,53 +402,33 @@ export default function Configurator() {
                                             selected={selectedModules.has(mod.id)}
                                             onClick={() => toggleModule(mod.id)}
                                             type="checkbox"
-                                            disabled={!valid && !selectedModules.has(mod.id)} // Don't disable if already selected (allows unselecting)
-                                            disabledReason={reason}
                                         />
-                                    );
-                                })}
-                            </div>
-                        </Section>
-
-                        {/* 3. Power */}
-                        <Section
-                            title="Power & Accessories"
-                            isOpen={openSections.power}
-                            onToggle={() => setOpenSections(prev => ({ ...prev, power: !prev.power }))}
-                        >
-                            <div className="grid grid-cols-1 gap-4">
-                                {modules.filter(m => m.type === 'accessory').map(mod => (
-                                    <OptionCard
-                                        key={mod.id}
-                                        title={mod.name}
-                                        price={mod.price}
-                                        description={mod.description}
-                                        tags={mod.tags}
-                                        selected={selectedModules.has(mod.id)}
-                                        onClick={() => toggleModule(mod.id)}
-                                        type="checkbox"
-                                    />
-                                ))}
-                            </div>
-                        </Section>
-
-                        {/* Mobile Sticky Footer */}
-                        <div className="lg:hidden sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-                            <div className="flex justify-between items-center mb-3">
-                                <span className="font-bold">Total</span>
-                                <span className="text-xl font-bold">₹{totalPrice.toLocaleString()}</span>
-                            </div>
-                            <button
-                                onClick={handleAddToCart}
-                                className="w-full bg-blue-700 text-white py-3 rounded-lg font-bold"
-                            >
-                                Add to Cart
-                            </button>
+                                    ))}
+                                </div>
+                            </Section>
                         </div>
-
                     </div>
                 </div>
             </div>
+
+            {/* Mobile Sticky Footer */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-gray-200 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-50 safe-area-bottom">
+                <div className="max-w-[1600px] mx-auto flex justify-between items-center">
+                    <div>
+                        <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total</div>
+                        <div className="text-xl font-bold text-gray-900">₹{totalPrice.toLocaleString()}</div>
+                    </div>
+                    <button
+                        onClick={handleAddToCart}
+                        className="bg-black text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-gray-800 transition-all flex items-center gap-2 active:scale-95"
+                    >
+                        <span>Add to Cart</span>
+                        <ChevronDown className="rotate-[-90deg]" size={16} />
+                    </button>
+                </div>
+            </div>
+
         </div>
     );
 }
+
