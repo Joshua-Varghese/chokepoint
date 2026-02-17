@@ -31,23 +31,32 @@ const SlotRow = ({ slot, onChange, onRemove }) => (
 
 // Helper for Variant Row
 const VariantRow = ({ variant, onChange, onRemove }) => (
-    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem', border: '1px solid #eee', borderRadius: '4px', background: '#fff' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+                placeholder="Variant Name (e.g. Standard ESP32)"
+                className="input"
+                value={variant.name}
+                onChange={e => onChange('name', e.target.value)}
+                style={{ flex: 2 }}
+            />
+            <input
+                type="number"
+                placeholder="Price Mod (+₹)"
+                className="input"
+                value={variant.priceMod}
+                onChange={e => onChange('priceMod', Number(e.target.value))}
+                style={{ flex: 1 }}
+            />
+            <button type="button" onClick={onRemove} style={{ color: 'red' }}><Trash2 size={16} /></button>
+        </div>
         <input
-            placeholder="Variant Name (e.g. Standard ESP32)"
+            placeholder="Description (e.g. Industrial grade enclosure...)"
             className="input"
-            value={variant.name}
-            onChange={e => onChange('name', e.target.value)}
-            style={{ flex: 2 }}
+            value={variant.description || ''}
+            onChange={e => onChange('description', e.target.value)}
+            style={{ width: '100%', fontSize: '0.85rem' }}
         />
-        <input
-            type="number"
-            placeholder="Price Mod (+₹)"
-            className="input"
-            value={variant.priceMod}
-            onChange={e => onChange('priceMod', Number(e.target.value))}
-            style={{ flex: 1 }}
-        />
-        <button type="button" onClick={onRemove} style={{ color: 'red' }}><Trash2 size={16} /></button>
     </div>
 );
 
@@ -307,7 +316,7 @@ export default function Products() {
                                             style={{ background: 'white' }}
                                             onClick={() => setFormData({
                                                 ...formData,
-                                                variants: [...(formData.variants || []), { id: `var_${Date.now()}`, name: '', priceMod: 0 }]
+                                                variants: [...(formData.variants || []), { id: `var_${Date.now()}`, name: '', priceMod: 0, description: '' }]
                                             })}
                                         >
                                             <Plus size={14} /> Add Edition

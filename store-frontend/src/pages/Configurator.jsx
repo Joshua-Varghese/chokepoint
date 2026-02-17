@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { Check, Plus, AlertCircle, ShoppingCart } from 'lucide-react';
+import { useCart } from '../context/CartContext';
 
 export default function Configurator() {
     const { id } = useParams();
@@ -133,6 +134,28 @@ export default function Configurator() {
         return { valid: true };
     };
 
+    const { addToCart } = useCart();
+
+    const handleAddToCart = () => {
+        if (!baseProduct) return;
+
+        const cartItem = {
+            id: crypto.randomUUID(), // Unique ID for this specific configuration
+            baseProduct: {
+                id: baseProduct.id,
+                name: baseProduct.name,
+                image: baseProduct.imageUrl,
+                basePrice: baseProduct.basePrice || baseProduct.price
+            },
+            variant: selectedVariant,
+            modules: modules.filter(m => selectedModules.has(m.id)), // Get full module objects
+            totalPrice: calculateTotal()
+        };
+
+        addToCart(cartItem);
+        navigate('/cart');
+    };
+
     if (loading) return <div className="min-h-screen flex items-center justify-center">Loading Configurator...</div>;
     if (!baseProduct) return <div>Product not found</div>;
 
@@ -260,7 +283,10 @@ export default function Configurator() {
                                     <div className="text-3xl font-bold">₹{totalPrice.toLocaleString()}</div>
                                 </div>
                             </div>
-                            <button className="w-full bg-blue-700 text-white py-4 rounded-lg font-bold hover:bg-blue-800 transition-colors uppercase tracking-wide text-sm">
+                            <button
+                                onClick={handleAddToCart}
+                                className="w-full bg-blue-700 text-white py-4 rounded-lg font-bold hover:bg-blue-800 transition-colors uppercase tracking-wide text-sm"
+                            >
                                 Add to Cart
                             </button>
                         </div>
@@ -287,7 +313,7 @@ export default function Configurator() {
                                         key={variant.id}
                                         title={variant.name}
                                         price={variant.priceMod}
-                                        description="Industrial grade enclosure rating with reinforced mounting points."
+                                        description={variant.description || "Standard platform edition."}
                                         selected={selectedVariant?.id === variant.id}
                                         onClick={() => setSelectedVariant(variant)}
                                     />
@@ -350,7 +376,10 @@ export default function Configurator() {
                                 <span className="font-bold">Total</span>
                                 <span className="text-xl font-bold">₹{totalPrice.toLocaleString()}</span>
                             </div>
-                            <button className="w-full bg-blue-700 text-white py-3 rounded-lg font-bold">
+                            <button
+                                onClick={handleAddToCart}
+                                className="w-full bg-blue-700 text-white py-3 rounded-lg font-bold"
+                            >
                                 Add to Cart
                             </button>
                         </div>

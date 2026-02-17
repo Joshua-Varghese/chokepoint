@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import DashboardLayout from './components/DashboardLayout';
 import Overview from './pages/Overview';
 import Products from './pages/Products';
+import Orders from './pages/Orders';
 import Devices from './pages/Devices';
 import DeviceDetail from './pages/DeviceDetail';
 import Customers from './pages/Customers';
@@ -34,7 +35,7 @@ function App() {
         <Route path="/*" element={user ? <DashboardLayout /> : <Navigate to="/login" />}>
           <Route index element={<Overview />} />
           <Route path="products" element={<Products />} />
-          <Route path="orders" element={<h2>Orders (Coming Soon)</h2>} />
+          <Route path="orders" element={<Orders />} />
           <Route path="devices" element={<Devices />} />
           <Route path="devices/:id" element={<DeviceDetail />} />
           <Route path="customers" element={<Customers />} />
