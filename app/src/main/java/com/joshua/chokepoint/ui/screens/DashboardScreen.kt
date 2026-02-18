@@ -32,7 +32,9 @@ fun DashboardScreen(
     onHistoryClick: () -> Unit,
     onMarketplaceClick: () -> Unit,
     onDevicesClick: () -> Unit,
-    onAddDeviceClick: () -> Unit
+    onAddDeviceClick: () -> Unit,
+    onRecalibrateClick: (String) -> Unit,
+    onSettingsClick: () -> Unit // New callback
 ) {
     Scaffold(
         bottomBar = {
@@ -61,7 +63,7 @@ fun DashboardScreen(
                     icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
                     label = { Text("Settings") },
                     selected = false,
-                    onClick = { onLogoutClick() } 
+                    onClick = { onSettingsClick() } 
                 )
             }
         },

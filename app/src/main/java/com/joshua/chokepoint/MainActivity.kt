@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -130,11 +131,44 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // START BACKGROUND SERVICE
+        val serviceIntent = android.content.Intent(this, com.joshua.chokepoint.service.SafetyService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+
         setupGoogleSignIn()
 
         setContent {
             ChokepointandroidTheme {
                 val navController = rememberNavController()
+                
+                // Request Notification Permission (Android 13+)
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { isGranted ->
+                        if (isGranted) {
+                            Log.d("Permissions", "Notification permission granted")
+                        } else {
+                            Log.w("Permissions", "Notification permission denied")
+                        }
+                    }
+                )
+
+                LaunchedEffect(Unit) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                         if (androidx.core.content.ContextCompat.checkSelfPermission(
+                                context, 
+                                android.Manifest.permission.POST_NOTIFICATIONS
+                            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) {
+                            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
 
                 // Update Dialog Overlay
                 if (isUpdateDialogVisible && updateRelease != null) {
@@ -315,8 +349,13 @@ class MainActivity : ComponentActivity() {
 
                     composable("dashboard") {
                         val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
-                        val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext, firestoreRepository) }
-                        // Inject firestoreRepository here too
+                        
+                        // Use Singleton
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val repository = remember { 
+                            com.joshua.chokepoint.data.mqtt.MqttRepository.getInstance(context)
+                        }
+                        
                         val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository, firestoreRepository) }
                         
                         // Collect state
@@ -324,22 +363,24 @@ class MainActivity : ComponentActivity() {
                         val sensorData by viewModel.sensorData.collectAsState()
                         val savedDevices by viewModel.savedDevices.collectAsState() // Collect devices
                         
-                        // Connect on launch
+                        // CONNECT IS HANDLED BY SERVICE NOW, BUT KEEPING IT HERE IS SAFE (IDEMPOTENT)
                         LaunchedEffect(Unit) {
                             viewModel.connect()
                         }
                         
-                        // Disconnect on leave
+                        // DO NOT DISCONNECT ON LEAVE - We want background service to control it
+                        /* 
                         DisposableEffect(Unit) {
                             onDispose {
                                 viewModel.disconnect()
                             }
                         }
+                        */
 
                         DashboardScreen(
                             sensorData = sensorData,
                             isConnected = isConnected,
-                            savedDevices = savedDevices, // Pass it
+                            savedDevices = savedDevices, 
                             onLogoutClick = {
                                 viewModel.disconnect()
                                 auth.signOut()
@@ -360,6 +401,25 @@ class MainActivity : ComponentActivity() {
                             },
                             onAddDeviceClick = {
                                 navController.navigate("provisioning")
+                            },
+                            onRecalibrateClick = { deviceId ->
+                                viewModel.recalibrateSensor(deviceId)
+                                Toast.makeText(applicationContext, "Calibrating sensor...", Toast.LENGTH_SHORT).show()
+                            },
+                            onSettingsClick = { // NEW
+                                navController.navigate("settings")
+                            }
+                        )
+                    }
+
+                    composable("settings") { // NEW ROUTE
+                        val settingsRepository = remember { com.joshua.chokepoint.data.repository.SettingsRepository(applicationContext) }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.SettingsViewModel(settingsRepository) }
+                        
+                        com.joshua.chokepoint.ui.screens.SettingsScreen(
+                            viewModel = viewModel,
+                            onBackClick = {
+                                navController.popBackStack()
                             }
                         )
                     }

@@ -30,4 +30,9 @@ class DashboardViewModel(
     fun disconnect() {
         repository.disconnect()
     }
+
+    fun recalibrateSensor(deviceId: String) {
+        // Send 'CAL' command to the device topic
+        repository.publishCommand(deviceId, "CAL")
+    }
 }
