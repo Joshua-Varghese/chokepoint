@@ -22,10 +22,14 @@ import androidx.compose.ui.unit.dp
 fun DevicesScreen(
     onBackClick: () -> Unit,
     onAddDeviceClick: () -> Unit,
-    viewModel: DevicesViewModel = androidx.lifecycle.viewmodel.compose.viewModel { 
-        DevicesViewModel(com.joshua.chokepoint.data.firestore.FirestoreRepository()) 
-    }
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val viewModel: DevicesViewModel = androidx.lifecycle.viewmodel.compose.viewModel { 
+        DevicesViewModel(
+            com.joshua.chokepoint.data.firestore.FirestoreRepository(),
+            com.joshua.chokepoint.data.mqtt.MqttRepository.getInstance(context)
+        ) 
+    }
     val devices by viewModel.devices.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }
     var showAddOptionsDialog by remember { mutableStateOf(false) }
@@ -39,7 +43,6 @@ fun DevicesScreen(
     var claimDeviceId by remember { mutableStateOf("") }
     var claimDeviceName by remember { mutableStateOf("") }
     
-    val context = androidx.compose.ui.platform.LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
@@ -48,16 +51,38 @@ fun DevicesScreen(
     if (showEditDialog && selectedDevice != null) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Rename Device") },
+            title = { Text("Device Settings") }, // Changed title
             text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Device Name") }
-                )
+                Column {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Device Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Dangerous Actions Section
+                    Text("Danger Zone", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedButton(
+                        onClick = {
+                            selectedDevice?.let { device ->
+                                viewModel.factoryResetDevice(device.id)
+                                android.widget.Toast.makeText(context, "Reset Command Sent", android.widget.Toast.LENGTH_SHORT).show()
+                                showEditDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Remote Factory Reset")
+                    }
+                }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         selectedDevice?.let { device ->
                             if (newName.isNotBlank()) {

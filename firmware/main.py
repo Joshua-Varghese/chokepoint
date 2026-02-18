@@ -30,6 +30,11 @@ def mqtt_callback(topic, msg):
         cmd = json.loads(msg)
         if cmd.get('cmd') == 'reset':
             machine.reset()
+        elif cmd.get('cmd') == 'reset_wifi':
+            print("Received Factory Reset Command!")
+            wm.reset_config()
+            time.sleep(1)
+            machine.reset()
         elif cmd.get('cmd') == 'ping':
             mqtt.publish(f"chokepoint/devices/{device_id}/status", "pong")
     except:

@@ -8,7 +8,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class DevicesViewModel(private val repository: FirestoreRepository) : ViewModel() {
+import com.joshua.chokepoint.data.mqtt.MqttRepository
+
+class DevicesViewModel(
+    private val repository: FirestoreRepository,
+    private val mqttRepository: MqttRepository // Add this
+) : ViewModel() {
 
     val devices: StateFlow<List<FirestoreRepository.Device>> = repository.observeDevices()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -38,6 +43,14 @@ class DevicesViewModel(private val repository: FirestoreRepository) : ViewModel(
                 onSuccess = { /* Handle success if needed, e.g. show toast via effect */ },
                 onError = { /* Handle error */ }
             )
+        }
+    }
+
+    fun factoryResetDevice(deviceId: String) {
+        viewModelScope.launch {
+            mqttRepository.publishCommand(deviceId, "{\"cmd\": \"reset_wifi\"}")
+            // Maybe remove from list locally or show toast?
+            // The device will restart and stop sending data.
         }
     }
 }
