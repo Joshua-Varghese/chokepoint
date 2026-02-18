@@ -360,25 +360,16 @@ class MainActivity : ComponentActivity() {
                         
                         // Collect state
                         val isConnected by viewModel.isConnected.collectAsState()
-                        val sensorData by viewModel.sensorData.collectAsState()
-                        val savedDevices by viewModel.savedDevices.collectAsState() // Collect devices
+                        // val sensorData by viewModel.sensorData.collectAsState() // REMOVED
+                        val deviceReadings by viewModel.deviceReadings.collectAsState() // ADDED
+                        val savedDevices by viewModel.savedDevices.collectAsState() 
                         
-                        // CONNECT IS HANDLED BY SERVICE NOW, BUT KEEPING IT HERE IS SAFE (IDEMPOTENT)
                         LaunchedEffect(Unit) {
                             viewModel.connect()
                         }
                         
-                        // DO NOT DISCONNECT ON LEAVE - We want background service to control it
-                        /* 
-                        DisposableEffect(Unit) {
-                            onDispose {
-                                viewModel.disconnect()
-                            }
-                        }
-                        */
-
                         DashboardScreen(
-                            sensorData = sensorData,
+                            deviceReadings = deviceReadings, // Changed
                             isConnected = isConnected,
                             savedDevices = savedDevices, 
                             onLogoutClick = {
@@ -390,8 +381,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onHistoryClick = {
-                                val id = sensorData.deviceId.ifEmpty { "unknown" }
-                                navController.navigate("analytics/$id")
+                                // TODO: Pass deviceId from Dashboard to support analytics
+                                // val id = sensorData.deviceId.ifEmpty { "unknown" }
+                                // navController.navigate("analytics/$id")
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
@@ -409,7 +401,7 @@ class MainActivity : ComponentActivity() {
                             onSettingsClick = {
                                 navController.navigate("settings")
                             },
-                            onProfileClick = { // NEW
+                            onProfileClick = { 
                                 navController.navigate("profile")
                             }
                         )

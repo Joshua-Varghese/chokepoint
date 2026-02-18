@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange // Add this
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sensors
@@ -43,6 +44,9 @@ fun DevicesScreen(
     var claimDeviceId by remember { mutableStateOf("") }
     var claimDeviceName by remember { mutableStateOf("") }
     
+    // Nuclear Delete Confirmation State
+    var deviceToDelete by remember { mutableStateOf<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device?>(null) }
+    
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
@@ -69,7 +73,7 @@ fun DevicesScreen(
                     OutlinedButton(
                         onClick = {
                             selectedDevice?.let { device ->
-                                viewModel.factoryResetDevice(device.id)
+                                viewModel.deleteDeviceFully(device.id) // Updated method name
                                 android.widget.Toast.makeText(context, "Reset Command Sent", android.widget.Toast.LENGTH_SHORT).show()
                                 showEditDialog = false
                             }
@@ -261,7 +265,9 @@ fun DevicesScreen(
                     items(devices) { device ->
                         DeviceListItem(
                             device = device,
-                            onDelete = { viewModel.removeDevice(device.id) },
+                            onDelete = { 
+                                deviceToDelete = device
+                            },
                             onEdit = {
                                 selectedDevice = device
                                 newName = device.name
@@ -282,6 +288,30 @@ fun DevicesScreen(
                 }
             }
         }
+    }
+    
+    // Nuclear Delete Confirmation
+    if (deviceToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deviceToDelete = null },
+            title = { Text("Delete Device?") },
+            text = { Text("This will Factory Reset the device (wipe WiFi) and remove it from your account. This cannot be undone.", color = MaterialTheme.colorScheme.error) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        deviceToDelete?.let { device ->
+                            viewModel.deleteDeviceFully(device.id)
+                            android.widget.Toast.makeText(context, "Device Reset & Removed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        deviceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete & Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToDelete = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -342,11 +372,13 @@ fun DeviceListItem(
                    
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = device.name, 
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
@@ -365,26 +397,22 @@ fun DeviceListItem(
                 }
                 
                 // Actions Menu
-                 Row {
-                     if (device.role == "admin") {
+                Row {
+                    if (device.role == "admin") {
                         IconButton(onClick = onCopyCode) {
                             Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary)
                         }
                         IconButton(onClick = onEdit) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        // Clear Data Button
+                        // Clear History Button - Changed Icon to DateRange
                         IconButton(onClick = { showClearConfirm = true }) {
-                           Icon(Icons.Default.Delete, contentDescription = "Clear History", tint = MaterialTheme.colorScheme.error)
-                           // Re-using Delete icon but maybe with different tint or we need a real clean icon.
-                           // Actually, let's stick to Delete for now as 'Sweep' is not in default set often.
+                            Icon(Icons.Default.DateRange, contentDescription = "Clear History", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                     }
+                    }
+                    // Delete Device Button (Nuclear)
                     IconButton(onClick = onDelete) {
-                        // Using Close or RemoveCircle for Delete Device to distinguish?
-                        // Let's keep it simple. The user asked for clean up.
-                        // I will use `Clear` icon if available, or just Delete.
-                        Icon(Icons.Default.Delete, contentDescription = "Remove Device", tint = MaterialTheme.colorScheme.onSurface.copy(alpha=0.4f))
+                        Icon(Icons.Default.Delete, contentDescription = "Remove Device", tint = MaterialTheme.colorScheme.error)
                     }
                 }
             }

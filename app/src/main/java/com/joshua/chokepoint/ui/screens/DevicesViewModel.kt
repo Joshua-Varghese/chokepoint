@@ -46,11 +46,17 @@ class DevicesViewModel(
         }
     }
 
-    fun factoryResetDevice(deviceId: String) {
+    fun deleteDeviceFully(deviceId: String) {
         viewModelScope.launch {
-            mqttRepository.publishCommand(deviceId, "{\"cmd\": \"reset_wifi\"}")
-            // Maybe remove from list locally or show toast?
-            // The device will restart and stop sending data.
+            // 1. Try to factory reset the device remotely
+            try {
+                mqttRepository.publishCommand(deviceId, "{\"cmd\": \"reset_wifi\"}")
+            } catch (e: Exception) {
+                // Ignore errors if device is already offline
+            }
+            
+            // 2. Remove from Firestore (Nuclear option)
+            repository.removeDevice(deviceId)
         }
     }
 }

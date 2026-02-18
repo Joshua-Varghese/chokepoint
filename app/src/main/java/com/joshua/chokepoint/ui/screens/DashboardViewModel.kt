@@ -20,20 +20,9 @@ class DashboardViewModel(
     val savedDevices: StateFlow<List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>> = firestoreRepository.observeDevices()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Currently Selected Device Logic (Default to first)
-    // In a real app, this would be a selection stored in DataStore or UI state
-    // For now, we derive it.
-    private val allReadings = repository.deviceReadings
-
-    // Exposed SensorData determined by what is selected or available
-    val sensorData: StateFlow<SensorData> = kotlinx.coroutines.flow.combine(allReadings, savedDevices) { readings, devices ->
-        if (devices.isEmpty()) {
-            return@combine SensorData(airQuality = "No Devices", deviceId = "No Devices Connected")
-        }
-        // TODO: Add selection support. For now, pick first device.
-        val targetId = devices.first().id
-        readings[targetId] ?: SensorData(deviceId = targetId, airQuality = "Waiting for data...")
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SensorData())
+    // Exposed Map of SensorData for all devices
+    val deviceReadings: StateFlow<Map<String, SensorData>> = repository.deviceReadings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     fun connect() {
         repository.connect()
