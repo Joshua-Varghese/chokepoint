@@ -2,6 +2,7 @@ package com.joshua.chokepoint.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable // New import
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,7 +35,8 @@ fun DashboardScreen(
     onDevicesClick: () -> Unit,
     onAddDeviceClick: () -> Unit,
     onRecalibrateClick: (String) -> Unit,
-    onSettingsClick: () -> Unit // New callback
+    onSettingsClick: () -> Unit,
+    onProfileClick: () -> Unit // New callback
 ) {
     Scaffold(
         bottomBar = {
@@ -107,7 +109,9 @@ fun DashboardScreen(
                     Icon(
                         imageVector = Icons.Filled.Person,
                         contentDescription = "Profile",
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier
+                             .size(28.dp)
+                             .clickable { onProfileClick() } // Make clickable
                     )
                 }
             }

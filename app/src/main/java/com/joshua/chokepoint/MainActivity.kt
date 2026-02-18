@@ -406,8 +406,38 @@ class MainActivity : ComponentActivity() {
                                 viewModel.recalibrateSensor(deviceId)
                                 Toast.makeText(applicationContext, "Calibrating sensor...", Toast.LENGTH_SHORT).show()
                             },
-                            onSettingsClick = { // NEW
+                            onSettingsClick = {
                                 navController.navigate("settings")
+                            },
+                            onProfileClick = { // NEW
+                                navController.navigate("profile")
+                            }
+                        )
+                    }
+
+                    composable("profile") {
+                        val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.ProfileViewModel(firestoreRepository) }
+                        
+                        com.joshua.chokepoint.ui.screens.ProfileScreen(
+                            viewModel = viewModel,
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onSignOutClick = {
+                                // STOP SERVICE? Maybe. For now, let's keep monitoring? 
+                                // Ideally, sign out should stop monitoring if it depends on user data.
+                                // But SafetyService is independent once started (though MqttRepository checks auth?).
+                                // MqttRepository uses BuildConfig credentials, so it might still work.
+                                // However, we should probably stop the service on explicit sign out.
+                                val serviceIntent = android.content.Intent(applicationContext, com.joshua.chokepoint.service.SafetyService::class.java)
+                                stopService(serviceIntent)
+                                
+                                auth.signOut()
+                                googleSignInClient.signOut()
+                                navController.navigate("landing") {
+                                    popUpTo("dashboard") { inclusive = true }
+                                }
                             }
                         )
                     }

@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.joshua.chokepoint.data.model.SensorData
+import com.joshua.chokepoint.data.model.UserProfile
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -315,15 +316,33 @@ class FirestoreRepository {
             .addOnFailureListener { onFailure(it) }
     }
 
-    fun getUserProfile(uid: String, onSuccess: (String?) -> Unit, onFailure: (Exception) -> Unit) {
+    fun getUser(uid: String, onSuccess: (UserProfile?) -> Unit, onFailure: (Exception) -> Unit) {
         db.collection("users").document(uid).get()
             .addOnSuccessListener { document ->
                 if (document.exists()) {
-                    onSuccess(document.getString("name"))
+                    val user = UserProfile(
+                        id = document.getString("id") ?: uid,
+                        name = document.getString("name") ?: "",
+                        email = document.getString("email") ?: "",
+                        createdAt = document.getTimestamp("createdAt")?.seconds ?: 0
+                    )
+                    onSuccess(user)
                 } else {
                     onSuccess(null)
                 }
             }
             .addOnFailureListener { onFailure(it) }
+    }
+    
+    fun updateName(uid: String, newName: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+        db.collection("users").document(uid)
+            .update("name", newName)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onFailure(it) }
+    }
+
+    // Deprecated but kept for compatibility with existing calls if any
+    fun getUserProfile(uid: String, onSuccess: (String?) -> Unit, onFailure: (Exception) -> Unit) {
+        getUser(uid, { user -> onSuccess(user?.name) }, onFailure)
     }
 }
