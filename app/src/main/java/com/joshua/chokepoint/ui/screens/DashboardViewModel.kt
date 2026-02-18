@@ -16,12 +16,24 @@ class DashboardViewModel(
     val isConnected: StateFlow<Boolean> = repository.isConnected
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val sensorData: StateFlow<SensorData> = repository.sensorData
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SensorData())
-        
-    // Listen to saved devices to get their names
+    // Device Management
     val savedDevices: StateFlow<List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>> = firestoreRepository.observeDevices()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Currently Selected Device Logic (Default to first)
+    // In a real app, this would be a selection stored in DataStore or UI state
+    // For now, we derive it.
+    private val allReadings = repository.deviceReadings
+
+    // Exposed SensorData determined by what is selected or available
+    val sensorData: StateFlow<SensorData> = kotlinx.coroutines.flow.combine(allReadings, savedDevices) { readings, devices ->
+        if (devices.isEmpty()) {
+            return@combine SensorData(airQuality = "No Devices", deviceId = "No Devices Connected")
+        }
+        // TODO: Add selection support. For now, pick first device.
+        val targetId = devices.first().id
+        readings[targetId] ?: SensorData(deviceId = targetId, airQuality = "Waiting for data...")
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SensorData())
 
     fun connect() {
         repository.connect()
@@ -32,7 +44,7 @@ class DashboardViewModel(
     }
 
     fun recalibrateSensor(deviceId: String) {
-        // Send 'CAL' command to the device topic
+        if (deviceId.isEmpty() || deviceId == "No Devices Connected") return
         repository.publishCommand(deviceId, "CAL")
     }
 }

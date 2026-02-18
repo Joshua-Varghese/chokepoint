@@ -24,10 +24,12 @@ class MqttRepository(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    private val _sensorData = MutableStateFlow(SensorData())
-    val sensorData: StateFlow<SensorData> = _sensorData.asStateFlow()
+    // Map of DeviceID -> SensorData
+    private val _deviceReadings = MutableStateFlow<Map<String, SensorData>>(emptyMap())
+    val deviceReadings: StateFlow<Map<String, SensorData>> = _deviceReadings.asStateFlow()
 
     private var mqttClient: MqttAndroidClient? = null
+    private var subscribedTopics = mutableSetOf<String>()
 
     fun connect() {
         if (mqttClient != null && mqttClient!!.isConnected) return
@@ -35,9 +37,8 @@ class MqttRepository(
         try {
             val clientId = MqttClient.generateClientId()
             
-            // Use Secure Config from local.properties
             val serverUri = BuildConfig.MQTT_BROKER_URL.ifEmpty { 
-                "tcp://puffin.rmq2.cloudamqp.com:1883" // Fallback only if local.properties failed, but should alert user
+                "tcp://puffin.rmq2.cloudamqp.com:1883"
             }
             
             mqttClient = MqttAndroidClient(context, serverUri, clientId)
@@ -46,14 +47,15 @@ class MqttRepository(
                 userName = BuildConfig.MQTT_USERNAME
                 password = BuildConfig.MQTT_PASSWORD.toCharArray()
                 isAutomaticReconnect = true
-                isCleanSession = true
+                isCleanSession = false // Keep session to receive missed messages? Maybe true for cleaner start.
             }
 
             mqttClient?.setCallback(object : MqttCallbackExtended {
                 override fun connectComplete(reconnect: Boolean, serverURI: String?) {
                      Log.d("MQTT", "Connection Complete. Reconnect: $reconnect")
                      _isConnected.value = true
-                     if(reconnect) subscribeToTopics()
+                     // Resubscribe to all needed topics
+                     resubscribeAll()
                 }
 
                 override fun connectionLost(cause: Throwable?) {
@@ -64,28 +66,25 @@ class MqttRepository(
                 override fun messageArrived(topic: String?, message: MqttMessage?) {
                     try {
                         val payload = String(message?.payload ?: ByteArray(0))
-                        Log.d("MQTT", "Message received: $payload")
+                        // Log.d("MQTT", "Message received: $payload")
                         parsePayload(payload)
                     } catch (e: Exception) {
                         Log.e("MQTT", "Error parsing message", e)
                     }
                 }
 
-                override fun deliveryComplete(token: IMqttDeliveryToken?) {
-                    // Not used for subscribing
-                }
+                override fun deliveryComplete(token: IMqttDeliveryToken?) { }
             })
 
             mqttClient?.connect(options, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     Log.d("MQTT", "Connected to broker")
                     _isConnected.value = true
-                    subscribeToTopics()
+                    resubscribeAll()
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e("MQTT", "Failed to connect: ${exception?.message}", exception)
-                    exception?.printStackTrace()
+                    Log.e("MQTT", "Failed to connect", exception)
                     _isConnected.value = false
                 }
             })
@@ -95,33 +94,59 @@ class MqttRepository(
         }
     }
 
-    private fun subscribeToTopics() {
+    // Called when connected or when device list changes
+    private fun resubscribeAll() {
+        if (mqttClient == null || !mqttClient!!.isConnected) return
+
+        subscribedTopics.forEach { topic ->
+             subscribeToTopic(topic)
+        }
+    }
+
+    private fun subscribeToTopic(topic: String) {
         try {
-            // Subscribe to all devices' data
-            val topic = "chokepoint/devices/+/data"
             mqttClient?.subscribe(topic, 0, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     Log.d("MQTT", "Subscribed to $topic")
                 }
-
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
                     Log.e("MQTT", "Failed to subscribe to $topic", exception)
                 }
             })
-        } catch (e: MqttException) {
-            Log.e("MQTT", "Exception during subscribe", e)
+        } catch (e: Exception) {
+            Log.e("MQTT", "Exception subscribing", e)
+        }
+    }
+    
+    private fun unsubscribeFromTopic(topic: String) {
+        try {
+             mqttClient?.unsubscribe(topic)
+             Log.d("MQTT", "Unsubscribed from $topic")
+        } catch (e: Exception) {
+            Log.e("MQTT", "Exception unsubscribing", e)
         }
     }
 
-    private var claimedDeviceIds: Set<String> = emptySet()
+    // Dynamic Subscription Management
+    private fun updateSubscriptions(devices: List<FirestoreRepository.Device>) {
+        val newTopics = devices.map { "chokepoint/devices/${it.id}/data" }.toSet()
+        
+        // Find topics to remove
+        val toRemove = subscribedTopics - newTopics
+        toRemove.forEach { unsubscribeFromTopic(it) }
+        
+        // Find topics to add
+        val toAdd = newTopics - subscribedTopics
+        toAdd.forEach { subscribeToTopic(it) }
 
-    // Initialize in a coroutine scope (e.g. from ViewModel or by making MqttRepository a helper)
-    // However, since MqttRepository is just a class here, we need to start observing somewhere.
-    // For simplicity given the current architecture, we'll expose a function to start filtering
-    // or rely on the fact that we can launch a coroutine if we had a scope.
-    // To avoid architectural refractory, we'll use a listener approach or just check against cache.
-    // BETTER APPROACH: We'll launch a coroutine in the constructor/init block using GlobalScope (careful) 
-    // or pass a scope. Given this is a prototype, GlobalScope or a dedicated scope is acceptable.
+        subscribedTopics.clear()
+        subscribedTopics.addAll(newTopics)
+        Log.d("MQTT", "Updated subscriptions. Active: $subscribedTopics")
+    }
+
+    private var claimedDeviceIds: Set<String> = emptySet()
+    
+    // Lifecycle Scope (Global for Singleton)
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
     private fun createNotificationChannel() {
@@ -140,6 +165,11 @@ class MqttRepository(
     }
 
     private fun checkThresholds(data: SensorData) {
+        // ... (Same Logic) ...
+        // Only verify if this device is allowed? Subscription handles that now.
+        // But double check against claimedDeviceIds just in case.
+        if (data.deviceId !in claimedDeviceIds) return
+
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
 
         // Check Settings First
@@ -150,10 +180,6 @@ class MqttRepository(
         var isSmoke = false
         var isAir = false
 
-        // SMOKE CHECK (Only if ALL is selected, per user request to prioritize CO2 in Critical)
-        // User asked: "Critical showing CO2 not smoke". 
-        // So if Sensitivity == ALL, we show Smoke + CO2.
-        // If Sensitivity == CRITICAL, we show CO2 only.
         if (sensitivity == com.joshua.chokepoint.data.repository.NotificationSensitivity.ALL) {
             if (data.smoke > 0.5) {
                 issues.add("Smoke Detected")
@@ -161,7 +187,6 @@ class MqttRepository(
             }
         }
 
-        // CO2/GAS CHECK (Always check if notifications are enabled)
         if (data.gasRaw > 2500 || data.co2 > 1500) {
              issues.add("High CO2/Gas")
              isAir = true
@@ -175,12 +200,11 @@ class MqttRepository(
             val content = if (isSmoke) "Evacuate immediately. Smoke usage detected on ${data.deviceId}."
                           else "Air quality is unsafe (${data.gasRaw}). Check ventilation."
 
-            triggerNotification(notificationManager, 1, title, content)
+            triggerNotification(notificationManager, data.deviceId.hashCode(), title, content)
         }
     }
 
     private fun triggerNotification(manager: android.app.NotificationManager, id: Int, title: String, content: String) {
-        // Create an explicit intent for an Activity in your app
         val intent = android.content.Intent(context, com.joshua.chokepoint.MainActivity::class.java).apply {
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -192,23 +216,20 @@ class MqttRepository(
         )
 
         val builder = androidx.core.app.NotificationCompat.Builder(context, "SAFETY_ALERTS")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert) // Replace with app icon in real app
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle(title)
             .setContentText(content)
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-            .setOnlyAlertOnce(false) // ALERT EVERY TIME
+            .setOnlyAlertOnce(false)
             .setAutoCancel(true)
-            .setContentIntent(pendingIntent) // OPEN APP ON CLICK
+            .setContentIntent(pendingIntent)
         
-        // Rate limit: Only notify every 5 seconds (for testing) to avoid spam
         val lastTime = lastNotificationTime[id] ?: 0L
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastTime > 5000) {
              Log.d("MQTT", "Triggering Notification ID: $id - Title: $title")
              manager.notify(id, builder.build())
              lastNotificationTime[id] = currentTime
-        } else {
-             Log.d("MQTT", "Rate Limited Notification ID: $id")
         }
     }
 
@@ -216,11 +237,10 @@ class MqttRepository(
 
     init {
         createNotificationChannel()
-        // Start watching for allowed devices immediately
         scope.launch {
             firestoreRepository.observeDevices().collect { devices ->
                 claimedDeviceIds = devices.map { it.id }.toSet()
-                Log.d("MQTT", "Updated Allowed Devices: $claimedDeviceIds")
+                updateSubscriptions(devices)
             }
         }
     }
@@ -240,22 +260,31 @@ class MqttRepository(
                 smoke = smoke,
                 deviceId = deviceId,
                 timestamp = System.currentTimeMillis(),
-                // Fill in defaults for restored fields if not available in MQTT payload
-                gasRaw = json.optInt("gas_raw", 0),
-                airQuality = json.optString("air_quality", "Unknown")
+                gasRaw = json.optInt("gas_raw", co2.toInt()), 
+                airQuality = json.optString("air_quality", calculateAirQuality(co2, smoke))
             )
-            _sensorData.value = data
             
-            // CHECK THRESHOLDS
+            // Update Map
+            _deviceReadings.value = _deviceReadings.value + (deviceId to data)
+            
             checkThresholds(data)
-            
-            // Save to Firestore history (sub-collection)
             firestoreRepository.saveSensorData(data)
             
         } catch (e: Exception) {
             Log.e("MQTT", "JSON Parsing error", e)
         }
     }
+
+    private fun calculateAirQuality(co2: Double, smoke: Double): String {
+        return when {
+            smoke > 0.5 -> "Hazardous" // Smoke detected
+            co2 > 1000 -> "Poor"
+            co2 > 400 -> "Moderate"
+            else -> "Good"
+        }
+    }
+
+
 
     fun publishCommand(deviceId: String, command: String) {
         if (mqttClient == null || !mqttClient!!.isConnected) return
