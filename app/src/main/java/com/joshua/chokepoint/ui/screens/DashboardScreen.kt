@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue // Add this
+import androidx.compose.runtime.setValue // Add this
 
 @Composable
 fun DashboardScreen(
@@ -38,6 +40,15 @@ fun DashboardScreen(
     onSettingsClick: () -> Unit,
     onProfileClick: () -> Unit // New callback
 ) {
+    // Force refresh every 10 seconds to update relative time
+    var ticker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0L) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while(true) {
+            kotlinx.coroutines.delay(10_000)
+            ticker = System.currentTimeMillis()
+        }
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -172,15 +183,29 @@ fun DashboardScreen(
                     }
                     // Try to find a friendly name for this deviceId
                     val friendlyName = savedDevices.find { it.id == sensorData.deviceId }?.name 
-                        ?: savedDevices.firstOrNull()?.name // Fallback: Show first device name for demo
+                        ?: savedDevices.firstOrNull()?.name 
                         ?: sensorData.deviceId.ifEmpty { "Unknown Device" }
 
+                    // Offline Logic
+                    val currentTime = if (ticker > 0) ticker else System.currentTimeMillis()
+                    val timeDiff = currentTime - sensorData.timestamp
+                    val isOffline = timeDiff > 30 * 1000 // 30 seconds threshold
+                    
+                    val statusText = if (isOffline) {
+                        val minutes = timeDiff / 60000
+                        val timeStr = if (minutes < 1) "Just now" else "$minutes min ago"
+                        "Offline • Last: $timeStr"
+                    } else {
+                        "Live"
+                    }
+                    val statusColor = if (isOffline) Color.Gray else MaterialTheme.colorScheme.onPrimary
+
                     Text(
-                        text = "$friendlyName • Live",
+                        text = "$friendlyName • $statusText",
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = statusColor,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

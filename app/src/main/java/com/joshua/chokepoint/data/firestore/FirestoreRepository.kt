@@ -5,6 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.joshua.chokepoint.data.model.SensorData
 import com.joshua.chokepoint.data.model.UserProfile
+import kotlinx.coroutines.tasks.await // Add this
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -239,6 +240,27 @@ class FirestoreRepository {
             }
 
         awaitClose { listener.remove() }
+    }
+
+    suspend fun getLastReading(deviceId: String): SensorData? {
+        return try {
+            val snapshot = db.collection("devices")
+                .document(deviceId)
+                .collection("readings")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(1)
+                .get()
+                .await() // Requires kotlinx-coroutines-play-services
+
+            if (!snapshot.isEmpty) {
+                snapshot.documents[0].toObject(SensorData::class.java)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("Firestore", "Error fetching last reading for $deviceId", e)
+            null
+        }
     }
 
     fun saveSensorData(data: SensorData) {

@@ -142,6 +142,29 @@ class MqttRepository(
         subscribedTopics.clear()
         subscribedTopics.addAll(newTopics)
         Log.d("MQTT", "Updated subscriptions. Active: $subscribedTopics")
+
+        // Fetch Last Known Data for these devices
+        scope.launch {
+            devices.forEach { device ->
+                // Check if we already have data (don't overwrite live data)
+                if (!_deviceReadings.value.containsKey(device.id)) {
+                    val lastData = firestoreRepository.getLastReading(device.id)
+                    if (lastData != null) {
+                        // Apply Fallback Parsing logic here too just in case old data is raw
+                        // But Firestore data should be clean if saved nicely.
+                        // Actually, safety check: ensure deviceId matches
+                        val cleanData = lastData.copy(deviceId = device.id) 
+                        
+                        // Update Map safely
+                        val currentMap = _deviceReadings.value
+                        if (!currentMap.containsKey(device.id)) {
+                             _deviceReadings.value = currentMap + (device.id to cleanData)
+                             Log.d("MQTT", "Restored last known data for ${device.id}")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var claimedDeviceIds: Set<String> = emptySet()
