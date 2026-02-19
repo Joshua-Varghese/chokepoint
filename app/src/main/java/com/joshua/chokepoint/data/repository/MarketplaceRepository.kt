@@ -34,8 +34,8 @@ class MarketplaceRepositoryImpl : MarketplaceRepository {
                         null
                     }
                 }.filter { p ->
-                    // Show if explicitly featured OR (no visibility set AND is a base unit)
-                    p.visibility == "featured" || (p.visibility.isEmpty() && p.type == "base")
+                    // Only show products that have at least one app badge assigned
+                    p.badges.isNotEmpty()
                 }
                 trySend(products)
             }

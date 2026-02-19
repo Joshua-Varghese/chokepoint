@@ -10,6 +10,7 @@ data class Product(
     val visibility: String = "", // featured | part
     val category: String = "",
     val tags: List<String> = emptyList(),
+    val badges: List<String> = emptyList(), // New Arrival | Best Seller | Featured | Staff Pick
     val variants: List<Map<String, Any>> = emptyList(),
     val compatibleModules: List<String> = emptyList()
 )
