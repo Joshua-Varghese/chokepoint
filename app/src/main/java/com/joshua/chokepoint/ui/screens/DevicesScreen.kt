@@ -354,7 +354,10 @@ fun DeviceListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     // Icon based on Role
                     Surface(
                         shape = androidx.compose.foundation.shape.CircleShape,

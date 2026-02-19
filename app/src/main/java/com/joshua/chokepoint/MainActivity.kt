@@ -30,6 +30,10 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 
 class MainActivity : ComponentActivity() {
 
@@ -145,29 +149,68 @@ class MainActivity : ComponentActivity() {
             ChokepointandroidTheme {
                 val navController = rememberNavController()
                 
-                // Request Notification Permission (Android 13+)
+                // Persistent Notification Permission (Android 13+)
                 val context = androidx.compose.ui.platform.LocalContext.current
+                var showPermissionRationale by remember { mutableStateOf(false) }
+                
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission(),
                     onResult = { isGranted ->
                         if (isGranted) {
                             Log.d("Permissions", "Notification permission granted")
+                            showPermissionRationale = false
                         } else {
                             Log.w("Permissions", "Notification permission denied")
+                            showPermissionRationale = true // keep showing
                         }
                     }
                 )
 
-                LaunchedEffect(Unit) {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                         if (androidx.core.content.ContextCompat.checkSelfPermission(
-                                context, 
-                                android.Manifest.permission.POST_NOTIFICATIONS
-                            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-                        ) {
-                            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                // Check on Resume
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, 
+                                    android.Manifest.permission.POST_NOTIFICATIONS
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                
+                                if (!hasPermission) {
+                                    showPermissionRationale = true
+                                } else {
+                                    showPermissionRationale = false
+                                }
+                            }
                         }
                     }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
+                if (showPermissionRationale) {
+                    AlertDialog(
+                        onDismissRequest = { /* Prevent dismiss */ },
+                        title = { Text("Notifications Required") },
+                        text = { Text("Chokepoint needs notifications to alert you of dangerous air quality levels. Please grant this permission to ensure your safety.") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+                            ) {
+                                Text("Grant Permission")
+                            }
+                        },
+                        dismissButton = {
+                           // No cancel option - persistent as requested
+                        }
+                    )
                 }
 
                 // Update Dialog Overlay
