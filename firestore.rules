@@ -22,6 +22,12 @@ service cloud.firestore {
          allow read: if true; // TEMPORARY DEBUG
       }
     }
+
+    // Orders: Allow public creation and updates (Guest Checkout)
+    match /orders/{orderId} {
+      allow create: if true;
+      allow read, update: if true; 
+    }
     
     // Default deny
     match /{document=**} {

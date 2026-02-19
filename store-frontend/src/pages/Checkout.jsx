@@ -146,8 +146,10 @@ export default function Checkout() {
             rzp1.open();
 
         } catch (error) {
-            console.error("Error initiating payment:", error);
-            toast.error("Failed to initiate payment.");
+            console.error("Error initiating payment detailed:", error);
+            console.log("Razorpay Key:", import.meta.env.VITE_RAZORPAY_KEY_ID);
+            console.log("Razorpay Object:", Razorpay);
+            toast.error("Failed to initiate payment: " + (error.message || "Unknown Error"));
         } finally {
             setLoading(false);
         }
