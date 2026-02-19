@@ -113,10 +113,10 @@ class FirestoreRepository {
         }
         
         // 1. Find device by Share Code
-        devicesCollection.whereEqualTo("shareCode", shareCode).get()
+        devicesCollection.whereEqualTo("shareCode", shareCode).get(com.google.firebase.firestore.Source.SERVER)
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
-                    onError(Exception("Invalid Code"))
+                    onError(Exception("Invalid Code: '$shareCode' not found"))
                     return@addOnSuccessListener
                 }
                 

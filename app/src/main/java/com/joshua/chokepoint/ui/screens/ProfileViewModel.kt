@@ -20,20 +20,49 @@ class ProfileViewModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
     init {
         loadProfile()
     }
 
     fun loadProfile() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        _error.value = null
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if (currentUser == null) {
+             _error.value = "Not Logged In"
+             return
+        }
+        val uid = currentUser.uid
+        
         _isLoading.value = true
         firestoreRepository.getUser(uid,
             onSuccess = { user ->
-                _userProfile.value = user
-                _isLoading.value = false
+                if (user != null) {
+                    _userProfile.value = user
+                    _isLoading.value = false
+                } else {
+                    // Profile missing! Attempt self-healing
+                    val email = currentUser.email ?: ""
+                    val name = currentUser.displayName ?: "User"
+                    
+                    firestoreRepository.syncUserProfile(uid, email, name,
+                        onSuccess = {
+                            // Retry loading after creation
+                            loadProfile()
+                        },
+                        onFailure = { e ->
+                            _isLoading.value = false
+                            _error.value = "Failed to create profile: ${e.message}"
+                        }
+                    )
+                }
             },
-            onFailure = {
+            onFailure = { e ->
                 _isLoading.value = false
+                _error.value = "Failed to load profile: ${e.message}"
             }
         )
     }

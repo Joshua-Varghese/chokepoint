@@ -152,7 +152,26 @@ fun ProfileScreen(
                         }
                     }
                 } ?: run {
-                    Text("User not found", modifier = Modifier.align(Alignment.Center))
+                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                             Text("User Profile Not Found", style = MaterialTheme.typography.titleLarge)
+                             Spacer(modifier = Modifier.height(8.dp))
+                             
+                             val errorMsg = viewModel.error.collectAsState().value
+                             if (errorMsg != null) {
+                                 Text(errorMsg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                                 Spacer(modifier = Modifier.height(16.dp))
+                             }
+                             
+                             Button(onClick = { viewModel.loadProfile() }) {
+                                 Text("Retry")
+                             }
+                             Spacer(modifier = Modifier.height(8.dp))
+                             TextButton(onClick = onSignOutClick) {
+                                 Text("Sign Out / Login")
+                             }
+                         }
+                     }
                 }
             }
         }
