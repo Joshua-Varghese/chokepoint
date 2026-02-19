@@ -20,6 +20,7 @@ import com.joshua.chokepoint.ui.theme.ChokepointandroidTheme
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.razorpay.PaymentResultListener
+import com.razorpay.Checkout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -65,6 +66,26 @@ class MainActivity : ComponentActivity(), PaymentResultListener {
     }
 
     override fun onPaymentError(code: Int, response: String?) {
-        Toast.makeText(this, "Payment Failed: $response", Toast.LENGTH_LONG).show()
+        try {
+            if (code == Checkout.PAYMENT_CANCELED || code == Checkout.TLS_ERROR) {
+                 Toast.makeText(this, "Payment Cancelled", Toast.LENGTH_SHORT).show()
+                 return
+            }
+            
+            // Try to parse detailed error
+            val errorMsg = try {
+                 val json = org.json.JSONObject(response ?: "")
+                 val errorObj = json.optJSONObject("error")
+                 errorObj?.optString("description") ?: response
+            } catch (e: Exception) {
+                 response
+            }
+            
+            Toast.makeText(this, "Payment Failed", Toast.LENGTH_LONG).show() // Masking details as requested
+            // Log the actual error for debugging
+             android.util.Log.e("RazorpayError", "Code: $code, Response: $response")
+        } catch (e: Exception) {
+            Toast.makeText(this, "Payment Failed", Toast.LENGTH_SHORT).show()
+        }
     }
 }
