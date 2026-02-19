@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase-config';
-import { LayoutDashboard, Package, ShoppingBag, Router, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, Warehouse, ShoppingBag, Router, Users, LogOut } from 'lucide-react';
 
 export default function DashboardLayout() {
     const navigate = useNavigate();
@@ -14,6 +14,7 @@ export default function DashboardLayout() {
     const navItems = [
         { label: 'Overview', path: '/', icon: <LayoutDashboard size={20} /> },
         { label: 'Products', path: '/products', icon: <Package size={20} /> },
+        { label: 'Inventory', path: '/inventory', icon: <Warehouse size={20} /> },
         { label: 'Orders', path: '/orders', icon: <ShoppingBag size={20} /> },
         { label: 'Devices', path: '/devices', icon: <Router size={20} /> },
         { label: 'Customers', path: '/customers', icon: <Users size={20} /> },
