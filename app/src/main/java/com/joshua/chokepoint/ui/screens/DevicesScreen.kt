@@ -11,6 +11,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cancel // Add this
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +31,8 @@ fun DevicesScreen(
     val viewModel: DevicesViewModel = androidx.lifecycle.viewmodel.compose.viewModel { 
         DevicesViewModel(
             com.joshua.chokepoint.data.firestore.FirestoreRepository(),
-            com.joshua.chokepoint.data.mqtt.MqttRepository.getInstance(context)
+            com.joshua.chokepoint.data.mqtt.MqttRepository.getInstance(context),
+            com.joshua.chokepoint.data.discovery.DiscoveryRepository(context)
         ) 
     }
     val devices by viewModel.devices.collectAsState()
@@ -38,9 +42,16 @@ fun DevicesScreen(
     var selectedDevice by remember { mutableStateOf<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device?>(null) }
     var newName by remember { mutableStateOf("") }
     var spectateCode by remember { mutableStateOf("") }
-
+    
+    val verificationState by viewModel.verificationState.collectAsState()
+    
     // Claim Device State (Moved up)
     var showClaimDialog by remember { mutableStateOf(false) }
+
+    // Reset verification when dialog opens/closes
+    LaunchedEffect(showClaimDialog) {
+        if (!showClaimDialog) viewModel.resetVerification()
+    }
     var claimDeviceId by remember { mutableStateOf("") }
     var claimDeviceName by remember { mutableStateOf("") }
     
@@ -163,6 +174,48 @@ fun DevicesScreen(
                         onValueChange = { claimDeviceName = it },
                         label = { Text("Nickname") }
                     )
+
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Verification Section
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.verifyDevice(claimDeviceId) },
+                            modifier = Modifier.weight(1f),
+                            enabled = claimDeviceId.isNotBlank() && verificationState != DevicesViewModel.VerificationState.Verifying
+                        ) {
+                            if (verificationState == DevicesViewModel.VerificationState.Verifying) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Verifying...")
+                            } else {
+                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Verify ID")
+                            }
+                        }
+                    }
+                    
+                    if (verificationState == DevicesViewModel.VerificationState.Success) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = "Verified", tint = Color(0xFF4CAF50))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Device Online & Verified", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (verificationState == DevicesViewModel.VerificationState.Failed) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Cancel, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Device Not Found", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             },
             confirmButton = {

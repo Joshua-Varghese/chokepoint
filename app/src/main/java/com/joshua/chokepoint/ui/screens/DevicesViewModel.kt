@@ -6,17 +6,53 @@ import com.joshua.chokepoint.data.firestore.FirestoreRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow // Add this
 import kotlinx.coroutines.launch
 
 import com.joshua.chokepoint.data.mqtt.MqttRepository
 
+import com.joshua.chokepoint.data.discovery.DiscoveryRepository
+        
 class DevicesViewModel(
     private val repository: FirestoreRepository,
-    private val mqttRepository: MqttRepository // Add this
+    private val mqttRepository: MqttRepository,
+    private val discoveryRepository: DiscoveryRepository
 ) : ViewModel() {
 
     val devices: StateFlow<List<FirestoreRepository.Device>> = repository.observeDevices()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _verificationState = kotlinx.coroutines.flow.MutableStateFlow<VerificationState>(VerificationState.Idle)
+    val verificationState = _verificationState.asStateFlow()
+
+    enum class VerificationState {
+        Idle, Verifying, Success, Failed
+    }
+
+    fun resetVerification() {
+        _verificationState.value = VerificationState.Idle
+    }
+
+    fun verifyDevice(deviceId: String) {
+        if (deviceId.isBlank()) return
+        
+        viewModelScope.launch {
+            _verificationState.value = VerificationState.Verifying
+            
+            // Clean ID just in case
+            val cleanId = deviceId.trim()
+            
+            discoveryRepository.verifyDevice(cleanId).collect { isFound ->
+                if (isFound) {
+                    _verificationState.value = VerificationState.Success
+                } else {
+                    _verificationState.value = VerificationState.Failed
+                }
+            }
+        }
+    }
+
+    // ... existing methods ...
 
     fun addDevice(name: String) {
         viewModelScope.launch {
