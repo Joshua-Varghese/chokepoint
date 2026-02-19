@@ -2,6 +2,7 @@ package com.joshua.chokepoint.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable // New import
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,18 +23,42 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue // Add this
+import androidx.compose.runtime.setValue // Add this
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class) // For Pager
 @Composable
 fun DashboardScreen(
-    sensorData: com.joshua.chokepoint.data.model.SensorData,
+    deviceReadings: Map<String, com.joshua.chokepoint.data.model.SensorData>, // Changed param
     isConnected: Boolean,
-    savedDevices: List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>, // Add this
+    savedDevices: List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>,
     onLogoutClick: () -> Unit,
     onHistoryClick: () -> Unit,
     onMarketplaceClick: () -> Unit,
     onDevicesClick: () -> Unit,
-    onAddDeviceClick: () -> Unit
+    onAddDeviceClick: () -> Unit,
+    onRecalibrateClick: (String) -> Unit,
+    onSettingsClick: () -> Unit,
+    onProfileClick: () -> Unit
 ) {
+    // Force refresh every 10 seconds to update relative time
+    var ticker by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0L) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while(true) {
+            kotlinx.coroutines.delay(10_000)
+            ticker = System.currentTimeMillis()
+        }
+    }
+    
+    // Pager State
+    // If no devices, we simulate 1 page for the "Add Device" placeholder
+    val pageCount = if (savedDevices.isEmpty()) 1 else savedDevices.size
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pageCount })
+
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -61,13 +86,13 @@ fun DashboardScreen(
                     icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
                     label = { Text("Settings") },
                     selected = false,
-                    onClick = { onLogoutClick() } 
+                    onClick = { onSettingsClick() } 
                 )
             }
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { /* TODO: onAddDeviceClick() */ onAddDeviceClick() },
+                onClick = { onAddDeviceClick() },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
@@ -105,82 +130,78 @@ fun DashboardScreen(
                     Icon(
                         imageVector = Icons.Filled.Person,
                         contentDescription = "Profile",
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier
+                             .size(28.dp)
+                             .clickable { onProfileClick() }
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Main AQI Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "AIR QUALITY INDEX",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
-                            letterSpacing = 2.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        // Show actual Air Quality from Sensor
-                        val quality = sensorData.airQuality.ifEmpty { "Unknown" }
+            // Check if we have devices
+            if (savedDevices.isEmpty()) {
+                // Placeholder Card
+                DashboardCard(
+                    data = com.joshua.chokepoint.data.model.SensorData(deviceId="No Devices", airQuality="Setup Required"),
+                    deviceName = "No Devices",
+                    isOffline = false,
+                    ticker = ticker
+                )
+            } else {
+                // Horizontal Pager for Devices
+                Column {
+                    androidx.compose.foundation.pager.HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth().height(260.dp)
+                    ) { page ->
+                        val device = savedDevices[page]
+                        val data = deviceReadings[device.id] ?: com.joshua.chokepoint.data.model.SensorData(deviceId = device.id, airQuality = "Waiting...")
                         
-                        Text(
-                            text = quality,
-                            style = MaterialTheme.typography.displayMedium, // Smaller font for text
-                            fontSize = 40.sp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
+                        // Offline Logic
+                        val currentTime = if (ticker > 0) ticker else System.currentTimeMillis()
+                        val timeDiff = currentTime - data.timestamp
+                        val isOffline = timeDiff > 30 * 1000 // 30 seconds threshold
+                        
+                        DashboardCard(
+                            data = data,
+                            deviceName = device.name,
+                            isOffline = isOffline,
+                            ticker = ticker
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(8.dp),
-                                    shape = CircleShape,
-                                    color = if(quality == "Hazardous") Color.Red else Color.Green
-                                ) {}
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Raw: ${sensorData.gasRaw}",
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Pager Indicator
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        repeat(pageCount) { iteration ->
+                            val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha=0.2f)
+                            Box(
+                                modifier = Modifier
+                                    .padding(2.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .size(8.dp)
+                            )
                         }
                     }
-                    // Try to find a friendly name for this deviceId
-                    val friendlyName = savedDevices.find { it.id == sensorData.deviceId }?.name 
-                        ?: savedDevices.firstOrNull()?.name // Fallback: Show first device name for demo
-                        ?: sensorData.deviceId.ifEmpty { "Unknown Device" }
-
-                    Text(
-                        text = "$friendlyName • Live",
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Detailed Readings (For CURRENTLY SELECTED Page)
+            // If empty, show zeros
+            val currentData = if (savedDevices.isNotEmpty()) {
+                val currentDevice = savedDevices[pagerState.currentPage]
+                deviceReadings[currentDevice.id] ?: com.joshua.chokepoint.data.model.SensorData()
+            } else {
+                com.joshua.chokepoint.data.model.SensorData()
+            }
 
             // Detailed Readings Header
             Text(
@@ -195,7 +216,7 @@ fun DashboardScreen(
             Row(modifier = Modifier.fillMaxWidth()) {
                 DetailCard(
                     title = "Gas Level",
-                    value = "${sensorData.gasRaw}",
+                    value = "${currentData.gasRaw}",
                     unit = "",
                     modifier = Modifier
                         .weight(1f)
@@ -204,7 +225,7 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 DetailCard(
                     title = "Quality",
-                    value = sensorData.airQuality.take(4), // Shorten if needed
+                    value = currentData.airQuality.take(9), // Limit length
                     unit = "",
                     modifier = Modifier
                         .weight(1f)
@@ -215,7 +236,7 @@ fun DashboardScreen(
             Row(modifier = Modifier.fillMaxWidth()) {
                 DetailCard(
                     title = "CO2 (Est)",
-                    value = "${(sensorData.gasRaw / 10)}", // Dummy estimation
+                    value = "${(currentData.gasRaw / 10)}", 
                     unit = "ppm",
                     modifier = Modifier
                         .weight(1f)
@@ -232,6 +253,88 @@ fun DashboardScreen(
                         .height(160.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun DashboardCard(
+    data: com.joshua.chokepoint.data.model.SensorData,
+    deviceName: String,
+    isOffline: Boolean,
+    ticker: Long
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(260.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "AIR QUALITY INDEX",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    text = data.airQuality.ifEmpty { "Unknown" },
+                    style = MaterialTheme.typography.displayMedium,
+                    fontSize = 40.sp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(8.dp),
+                            shape = CircleShape,
+                            color = if(data.airQuality == "Hazardous") Color.Red else Color.Green
+                        ) {}
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Raw: ${data.gasRaw}",
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+
+            // Offline Logic
+            // ... (Logic passed in via params to keep this pure if possible, or recalculated)
+            // We passed isOffline
+            
+            val statusText = if (isOffline) {
+                // We need timestamp to calculate "min ago" again if we want dynamic?
+                // Or just show "Offline"
+                "Offline" 
+            } else {
+                "Live"
+            }
+            val statusColor = if (isOffline) Color.Gray else MaterialTheme.colorScheme.onPrimary
+
+            Text(
+                text = "$deviceName • $statusText",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 24.dp),
+                color = statusColor,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

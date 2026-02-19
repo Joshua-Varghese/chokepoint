@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -29,6 +30,10 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 
 class MainActivity : ComponentActivity() {
 
@@ -130,11 +135,83 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // START BACKGROUND SERVICE
+        val serviceIntent = android.content.Intent(this, com.joshua.chokepoint.service.SafetyService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+
         setupGoogleSignIn()
 
         setContent {
             ChokepointandroidTheme {
                 val navController = rememberNavController()
+                
+                // Persistent Notification Permission (Android 13+)
+                val context = androidx.compose.ui.platform.LocalContext.current
+                var showPermissionRationale by remember { mutableStateOf(false) }
+                
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { isGranted ->
+                        if (isGranted) {
+                            Log.d("Permissions", "Notification permission granted")
+                            showPermissionRationale = false
+                        } else {
+                            Log.w("Permissions", "Notification permission denied")
+                            showPermissionRationale = true // keep showing
+                        }
+                    }
+                )
+
+                // Check on Resume
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, 
+                                    android.Manifest.permission.POST_NOTIFICATIONS
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                
+                                if (!hasPermission) {
+                                    showPermissionRationale = true
+                                } else {
+                                    showPermissionRationale = false
+                                }
+                            }
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
+                if (showPermissionRationale) {
+                    AlertDialog(
+                        onDismissRequest = { /* Prevent dismiss */ },
+                        title = { Text("Notifications Required") },
+                        text = { Text("Chokepoint needs notifications to alert you of dangerous air quality levels. Please grant this permission to ensure your safety.") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+                            ) {
+                                Text("Grant Permission")
+                            }
+                        },
+                        dismissButton = {
+                           // No cancel option - persistent as requested
+                        }
+                    )
+                }
 
                 // Update Dialog Overlay
                 if (isUpdateDialogVisible && updateRelease != null) {
@@ -315,31 +392,29 @@ class MainActivity : ComponentActivity() {
 
                     composable("dashboard") {
                         val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
-                        val repository = remember { com.joshua.chokepoint.data.mqtt.MqttRepository(applicationContext, firestoreRepository) }
-                        // Inject firestoreRepository here too
+                        
+                        // Use Singleton
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val repository = remember { 
+                            com.joshua.chokepoint.data.mqtt.MqttRepository.getInstance(context)
+                        }
+                        
                         val viewModel = remember { com.joshua.chokepoint.ui.screens.DashboardViewModel(repository, firestoreRepository) }
                         
                         // Collect state
                         val isConnected by viewModel.isConnected.collectAsState()
-                        val sensorData by viewModel.sensorData.collectAsState()
-                        val savedDevices by viewModel.savedDevices.collectAsState() // Collect devices
+                        // val sensorData by viewModel.sensorData.collectAsState() // REMOVED
+                        val deviceReadings by viewModel.deviceReadings.collectAsState() // ADDED
+                        val savedDevices by viewModel.savedDevices.collectAsState() 
                         
-                        // Connect on launch
                         LaunchedEffect(Unit) {
                             viewModel.connect()
                         }
                         
-                        // Disconnect on leave
-                        DisposableEffect(Unit) {
-                            onDispose {
-                                viewModel.disconnect()
-                            }
-                        }
-
                         DashboardScreen(
-                            sensorData = sensorData,
+                            deviceReadings = deviceReadings, // Changed
                             isConnected = isConnected,
-                            savedDevices = savedDevices, // Pass it
+                            savedDevices = savedDevices, 
                             onLogoutClick = {
                                 viewModel.disconnect()
                                 auth.signOut()
@@ -349,8 +424,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onHistoryClick = {
-                                val id = sensorData.deviceId.ifEmpty { "unknown" }
-                                navController.navigate("analytics/$id")
+                                // TODO: Pass deviceId from Dashboard to support analytics
+                                // val id = sensorData.deviceId.ifEmpty { "unknown" }
+                                // navController.navigate("analytics/$id")
                             },
                             onMarketplaceClick = {
                                 navController.navigate("marketplace")
@@ -360,6 +436,55 @@ class MainActivity : ComponentActivity() {
                             },
                             onAddDeviceClick = {
                                 navController.navigate("provisioning")
+                            },
+                            onRecalibrateClick = { deviceId ->
+                                viewModel.recalibrateSensor(deviceId)
+                                Toast.makeText(applicationContext, "Calibrating sensor...", Toast.LENGTH_SHORT).show()
+                            },
+                            onSettingsClick = {
+                                navController.navigate("settings")
+                            },
+                            onProfileClick = { 
+                                navController.navigate("profile")
+                            }
+                        )
+                    }
+
+                    composable("profile") {
+                        val firestoreRepository = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.ProfileViewModel(firestoreRepository) }
+                        
+                        com.joshua.chokepoint.ui.screens.ProfileScreen(
+                            viewModel = viewModel,
+                            onBackClick = {
+                                navController.popBackStack()
+                            },
+                            onSignOutClick = {
+                                // STOP SERVICE? Maybe. For now, let's keep monitoring? 
+                                // Ideally, sign out should stop monitoring if it depends on user data.
+                                // But SafetyService is independent once started (though MqttRepository checks auth?).
+                                // MqttRepository uses BuildConfig credentials, so it might still work.
+                                // However, we should probably stop the service on explicit sign out.
+                                val serviceIntent = android.content.Intent(applicationContext, com.joshua.chokepoint.service.SafetyService::class.java)
+                                stopService(serviceIntent)
+                                
+                                auth.signOut()
+                                googleSignInClient.signOut()
+                                navController.navigate("landing") {
+                                    popUpTo("dashboard") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable("settings") { // NEW ROUTE
+                        val settingsRepository = remember { com.joshua.chokepoint.data.repository.SettingsRepository(applicationContext) }
+                        val viewModel = remember { com.joshua.chokepoint.ui.screens.SettingsViewModel(settingsRepository) }
+                        
+                        com.joshua.chokepoint.ui.screens.SettingsScreen(
+                            viewModel = viewModel,
+                            onBackClick = {
+                                navController.popBackStack()
                             }
                         )
                     }

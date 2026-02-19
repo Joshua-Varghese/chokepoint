@@ -10,10 +10,13 @@ try:
 except ImportError:
     mq135 = None
 
+from discovery import Discovery
+
 # --- Global State ---
 device_id = ubinascii.hexlify(machine.unique_id()).decode()
 wm = WifiManager()
 mqtt = None
+discovery_service = None
 
 # --- Sensor Mock if mq135 missing ---
 if mq135:
@@ -30,13 +33,18 @@ def mqtt_callback(topic, msg):
         cmd = json.loads(msg)
         if cmd.get('cmd') == 'reset':
             machine.reset()
+        elif cmd.get('cmd') == 'reset_wifi':
+            print("Received Factory Reset Command!")
+            wm.reset_config()
+            time.sleep(1)
+            machine.reset()
         elif cmd.get('cmd') == 'ping':
             mqtt.publish(f"chokepoint/devices/{device_id}/status", "pong")
     except:
         pass
 
 def main():
-    global mqtt
+    global mqtt, discovery_service
     print("Booting Chokepoint Firmware...")
     print("Device ID:", device_id)
     
@@ -51,13 +59,17 @@ def main():
     # 2. If Failed -> Provisioning Mode
     if not connected:
         print("WiFi Connection Failed or Config Missing.")
-        # Only start AP if we really can't connect.
-        # Check if we should retry or go straight to AP. 
-        # For now, go to AP.
         wm.run_provisioning_server()
-        return # run_provisioning_server loops forever/resets
+        return 
 
-    # 3. MQTT Connection
+    # 3. Initialize Discovery
+    try:
+        discovery_service = Discovery()
+        print("Discovery Service Started on UDP 6666")
+    except Exception as e:
+        print("Discovery Init Failed:", e)
+
+    # 4. MQTT Connection
     print("WiFi Connected. Connecting to RabbitMQ...")
     try:
         mqtt = MQTTClient(
@@ -77,26 +89,34 @@ def main():
         mqtt.subscribe(cmd_topic)
         
         # Main Loop
+        last_sensor_read = 0
         while True:
             try:
+                # Fast checks
                 mqtt.check_msg()
+                if discovery_service:
+                    discovery_service.check()
                 
-                # Read Sensor
-                data = mq.get_readings() # Returns dict
-                data['device_id'] = device_id
-                data['timestamp'] = int(time.time())
+                # Periodic Sensor Read (every 2s)
+                now = time.time()
+                if now - last_sensor_read >= 2:
+                    last_sensor_read = now
+                    
+                    # Read Sensor
+                    data = mq.get_readings()
+                    data['device_id'] = device_id
+                    data['timestamp'] = int(now)
+                    
+                    # Publish
+                    payload = json.dumps(data)
+                    topic = f"chokepoint/devices/{device_id}/data"
+                    mqtt.publish(topic, payload)
+                    print("Pub:", payload)
                 
-                # Publish
-                payload = json.dumps(data)
-                topic = f"chokepoint/devices/{device_id}/data"
-                mqtt.publish(topic, payload)
-                print("Pub:", payload)
-                
-                time.sleep(2)
+                time.sleep(0.1) # Responsive loop
                 
             except OSError as e:
                 print("MQTT Error:", e)
-                # Try reconnect
                 try: 
                     mqtt.connect() 
                     mqtt.subscribe(cmd_topic)

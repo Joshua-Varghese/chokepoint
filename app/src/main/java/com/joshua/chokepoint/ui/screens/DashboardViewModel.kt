@@ -16,12 +16,13 @@ class DashboardViewModel(
     val isConnected: StateFlow<Boolean> = repository.isConnected
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val sensorData: StateFlow<SensorData> = repository.sensorData
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SensorData())
-        
-    // Listen to saved devices to get their names
+    // Device Management
     val savedDevices: StateFlow<List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>> = firestoreRepository.observeDevices()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Exposed Map of SensorData for all devices
+    val deviceReadings: StateFlow<Map<String, SensorData>> = repository.deviceReadings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     fun connect() {
         repository.connect()
@@ -29,5 +30,10 @@ class DashboardViewModel(
     
     fun disconnect() {
         repository.disconnect()
+    }
+
+    fun recalibrateSensor(deviceId: String) {
+        if (deviceId.isEmpty() || deviceId == "No Devices Connected") return
+        repository.publishCommand(deviceId, "CAL")
     }
 }

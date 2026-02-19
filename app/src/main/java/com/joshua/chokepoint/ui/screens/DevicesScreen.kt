@@ -6,10 +6,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange // Add this
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cancel // Add this
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,10 +26,15 @@ import androidx.compose.ui.unit.dp
 fun DevicesScreen(
     onBackClick: () -> Unit,
     onAddDeviceClick: () -> Unit,
-    viewModel: DevicesViewModel = androidx.lifecycle.viewmodel.compose.viewModel { 
-        DevicesViewModel(com.joshua.chokepoint.data.firestore.FirestoreRepository()) 
-    }
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val viewModel: DevicesViewModel = androidx.lifecycle.viewmodel.compose.viewModel { 
+        DevicesViewModel(
+            com.joshua.chokepoint.data.firestore.FirestoreRepository(),
+            com.joshua.chokepoint.data.mqtt.MqttRepository.getInstance(context),
+            com.joshua.chokepoint.data.discovery.DiscoveryRepository(context)
+        ) 
+    }
     val devices by viewModel.devices.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }
     var showAddOptionsDialog by remember { mutableStateOf(false) }
@@ -33,13 +42,22 @@ fun DevicesScreen(
     var selectedDevice by remember { mutableStateOf<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device?>(null) }
     var newName by remember { mutableStateOf("") }
     var spectateCode by remember { mutableStateOf("") }
-
+    
+    val verificationState by viewModel.verificationState.collectAsState()
+    
     // Claim Device State (Moved up)
     var showClaimDialog by remember { mutableStateOf(false) }
+
+    // Reset verification when dialog opens/closes
+    LaunchedEffect(showClaimDialog) {
+        if (!showClaimDialog) viewModel.resetVerification()
+    }
     var claimDeviceId by remember { mutableStateOf("") }
     var claimDeviceName by remember { mutableStateOf("") }
     
-    val context = androidx.compose.ui.platform.LocalContext.current
+    // Nuclear Delete Confirmation State
+    var deviceToDelete by remember { mutableStateOf<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device?>(null) }
+    
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
@@ -48,16 +66,38 @@ fun DevicesScreen(
     if (showEditDialog && selectedDevice != null) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Rename Device") },
+            title = { Text("Device Settings") }, // Changed title
             text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Device Name") }
-                )
+                Column {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Device Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Dangerous Actions Section
+                    Text("Danger Zone", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    OutlinedButton(
+                        onClick = {
+                            selectedDevice?.let { device ->
+                                viewModel.deleteDeviceFully(device.id) // Updated method name
+                                android.widget.Toast.makeText(context, "Reset Command Sent", android.widget.Toast.LENGTH_SHORT).show()
+                                showEditDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Remote Factory Reset")
+                    }
+                }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         selectedDevice?.let { device ->
                             if (newName.isNotBlank()) {
@@ -134,6 +174,48 @@ fun DevicesScreen(
                         onValueChange = { claimDeviceName = it },
                         label = { Text("Nickname") }
                     )
+
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Verification Section
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.verifyDevice(claimDeviceId) },
+                            modifier = Modifier.weight(1f),
+                            enabled = claimDeviceId.isNotBlank() && verificationState != DevicesViewModel.VerificationState.Verifying
+                        ) {
+                            if (verificationState == DevicesViewModel.VerificationState.Verifying) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Verifying...")
+                            } else {
+                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Verify ID")
+                            }
+                        }
+                    }
+                    
+                    if (verificationState == DevicesViewModel.VerificationState.Success) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = "Verified", tint = Color(0xFF4CAF50))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Device Online & Verified", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (verificationState == DevicesViewModel.VerificationState.Failed) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Cancel, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Device Not Found", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -236,7 +318,9 @@ fun DevicesScreen(
                     items(devices) { device ->
                         DeviceListItem(
                             device = device,
-                            onDelete = { viewModel.removeDevice(device.id) },
+                            onDelete = { 
+                                deviceToDelete = device
+                            },
                             onEdit = {
                                 selectedDevice = device
                                 newName = device.name
@@ -257,6 +341,30 @@ fun DevicesScreen(
                 }
             }
         }
+    }
+    
+    // Nuclear Delete Confirmation
+    if (deviceToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deviceToDelete = null },
+            title = { Text("Delete Device?") },
+            text = { Text("This will Factory Reset the device (wipe WiFi) and remove it from your account. This cannot be undone.", color = MaterialTheme.colorScheme.error) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        deviceToDelete?.let { device ->
+                            viewModel.deleteDeviceFully(device.id)
+                            android.widget.Toast.makeText(context, "Device Reset & Removed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        deviceToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete & Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deviceToDelete = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -299,7 +407,10 @@ fun DeviceListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     // Icon based on Role
                     Surface(
                         shape = androidx.compose.foundation.shape.CircleShape,
@@ -317,11 +428,13 @@ fun DeviceListItem(
                    
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = device.name, 
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
@@ -340,26 +453,22 @@ fun DeviceListItem(
                 }
                 
                 // Actions Menu
-                 Row {
-                     if (device.role == "admin") {
+                Row {
+                    if (device.role == "admin") {
                         IconButton(onClick = onCopyCode) {
                             Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary)
                         }
                         IconButton(onClick = onEdit) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        // Clear Data Button
+                        // Clear History Button - Changed Icon to DateRange
                         IconButton(onClick = { showClearConfirm = true }) {
-                           Icon(Icons.Default.Delete, contentDescription = "Clear History", tint = MaterialTheme.colorScheme.error)
-                           // Re-using Delete icon but maybe with different tint or we need a real clean icon.
-                           // Actually, let's stick to Delete for now as 'Sweep' is not in default set often.
+                            Icon(Icons.Default.DateRange, contentDescription = "Clear History", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                     }
+                    }
+                    // Delete Device Button (Nuclear)
                     IconButton(onClick = onDelete) {
-                        // Using Close or RemoveCircle for Delete Device to distinguish?
-                        // Let's keep it simple. The user asked for clean up.
-                        // I will use `Clear` icon if available, or just Delete.
-                        Icon(Icons.Default.Delete, contentDescription = "Remove Device", tint = MaterialTheme.colorScheme.onSurface.copy(alpha=0.4f))
+                        Icon(Icons.Default.Delete, contentDescription = "Remove Device", tint = MaterialTheme.colorScheme.error)
                     }
                 }
             }

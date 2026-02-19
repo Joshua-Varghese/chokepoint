@@ -30,6 +30,16 @@ class WifiManager:
         except:
             return False
 
+    def reset_config(self):
+        import os
+        try:
+            os.remove(self.config_file)
+            print("Config deleted.")
+            return True
+        except Exception as e:
+            print("Error deleting config:", e)
+            return False
+
     def start_ap(self):
         self.ap_if.active(True)
         ssid = 'Chokepoint-' + self.get_device_id()
