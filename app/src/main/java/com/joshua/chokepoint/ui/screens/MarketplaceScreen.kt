@@ -1,5 +1,10 @@
 package com.joshua.chokepoint.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -7,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
@@ -18,6 +24,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.joshua.chokepoint.data.model.Product
 
@@ -26,26 +36,26 @@ import com.joshua.chokepoint.data.model.Product
 fun MarketplaceScreen(
     viewModel: MarketplaceViewModel,
     onBackClick: () -> Unit,
-    onProductClick: (String) -> Unit,
-    onCartClick: () -> Unit
+    onProductClick: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Marketplace") },
+                title = { Text("Chokepoint Store") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadProducts() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                    IconButton(onClick = onCartClick) {
-                        Icon(Icons.Default.ShoppingCart, contentDescription = "Cart")
+                    IconButton(onClick = { 
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://chokepoint-android.web.app/"))
+                        context.startActivity(intent)
+                    }) {
+                        Icon(Icons.Default.OpenInBrowser, contentDescription = "Web Configurator")
                     }
                 }
             )
@@ -80,21 +90,56 @@ fun MarketplaceScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                "No products found",
+                                "No featured products",
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Check back soon for new items!",
+                                "Check our web configurator for custom builds!",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Button(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://chokepoint-android.web.app/"))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.padding(top = 16.dp)
+                            ) {
+                                Text("Open Configurator")
+                            }
                         }
                     } else {
-                        ProductGrid(
-                            products = state.products,
-                            onProductClick = onProductClick
-                        )
+                        Column {
+                            // Banner
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .clickable {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://chokepoint-android.web.app/"))
+                                        context.startActivity(intent)
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.OpenInBrowser, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column {
+                                        Text("Custom Build?", style = MaterialTheme.typography.titleMedium)
+                                        Text("Use our powerful web configurator", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+                            
+                            ProductGrid(
+                                products = state.products,
+                                onProductClick = onProductClick
+                            )
+                        }
                     }
                 }
             }
@@ -127,18 +172,35 @@ fun ProductCard(
 ) {
     Card(
         onClick = onClick,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column {
-            AsyncImage(
-                model = product.imageUrl,
-                contentDescription = product.name,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp),
-                contentScale = ContentScale.Crop
-            )
+            Box(modifier = Modifier.height(140.dp)) {
+                AsyncImage(
+                    model = product.imageUrl,
+                    contentDescription = product.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                if (product.tags.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = product.tags.first().uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+            
             Column(
                 modifier = Modifier.padding(12.dp)
             ) {
@@ -148,12 +210,25 @@ fun ProductCard(
                     maxLines = 1
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "₹${product.price}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "₹${product.price.toInt()}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (product.variants.size > 0) {
+                        Text(
+                            text = "${product.variants.size} Options",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
             }
         }
     }
