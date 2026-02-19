@@ -267,8 +267,8 @@ fun DevicesScreen(
                                     showSpectateDialog = false
                                     android.widget.Toast.makeText(context, "Device Linked!", android.widget.Toast.LENGTH_SHORT).show()
                                 },
-                                onError = {
-                                    android.widget.Toast.makeText(context, "Invalid Code", android.widget.Toast.LENGTH_SHORT).show()
+                                onError = { e ->
+                                    android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }
