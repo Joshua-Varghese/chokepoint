@@ -17,6 +17,9 @@ class MarketplaceRepositoryImpl : MarketplaceRepository {
     private val collection = db.collection("products")
 
     override fun getProducts(): Flow<List<Product>> = kotlinx.coroutines.flow.callbackFlow {
+        // We fetch ALL and filter client-side to handle the legacy mix + complex OR logic
+        // Ideally, you'd have a specific index for this, but client-side filtering 
+        // for < 100 products is instant and safer for legacy data.
         val listener = collection.addSnapshotListener { snapshot, e ->
             if (e != null) {
                 close(e)
@@ -30,6 +33,9 @@ class MarketplaceRepositoryImpl : MarketplaceRepository {
                     } catch (e: Exception) {
                         null
                     }
+                }.filter { p ->
+                    // Show if explicitly featured OR (no visibility set AND is a base unit)
+                    p.visibility == "featured" || (p.visibility.isEmpty() && p.type == "base")
                 }
                 trySend(products)
             }

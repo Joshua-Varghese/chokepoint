@@ -1,6 +1,10 @@
 package com.joshua.chokepoint.ui.screens
 
+import android.app.Activity
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,44 +22,35 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.joshua.chokepoint.data.model.Product
 import com.joshua.chokepoint.data.repository.CartRepository
+import com.joshua.chokepoint.data.repository.CheckoutHelper
 import com.joshua.chokepoint.data.repository.MarketplaceRepository
 import kotlinx.coroutines.launch
 
 class ProductDetailViewModel(
-    private val productId: String,
     private val repository: MarketplaceRepository,
     private val cartRepository: CartRepository
 ) : ViewModel() {
-    
     var product by mutableStateOf<Product?>(null)
-    var isLoading by mutableStateOf(true)
-    var isAdding by mutableStateOf(false)
+        private set
+    var loading by mutableStateOf(true)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
 
-    init {
-        loadProduct()
-    }
-
-    private fun loadProduct() {
+    fun loadProduct(productId: String) {
         viewModelScope.launch {
-            isLoading = true
+            loading = true
             product = repository.getProduct(productId)
-            isLoading = false
-        }
-    }
-
-    fun addToCart(onSuccess: () -> Unit) {
-        val p = product ?: return
-        viewModelScope.launch {
-            isAdding = true
-            cartRepository.addToCart(p, 1)
-            isAdding = false
-            onSuccess()
+            if (product == null) {
+                error = "Product not found"
+            }
+            loading = false
         }
     }
 }
@@ -68,29 +64,45 @@ fun ProductDetailScreen(
     onBackClick: () -> Unit,
     onCartClick: () -> Unit
 ) {
-    val viewModel = remember { ProductDetailViewModel(productId, repository, cartRepository) }
+    val viewModel: ProductDetailViewModel = viewModel {
+        ProductDetailViewModel(repository, cartRepository)
+    }
+
+    LaunchedEffect(productId) {
+        viewModel.loadProduct(productId)
+    }
+
     val context = LocalContext.current
-    val product = viewModel.product
+    val activity = context as? Activity
+    val checkoutHelper = remember { activity?.let { CheckoutHelper(it) } }
+
+    var selectedVariant by remember { mutableStateOf<Map<String, Any>?>(null) }
+
+    // Auto-select first variant if available and nothing selected
+    LaunchedEffect(viewModel.product) {
+        if (selectedVariant == null && !viewModel.product?.variants.isNullOrEmpty()) {
+            selectedVariant = viewModel.product!!.variants[0]
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(product?.name ?: "Loading...") },
+                title = { Text(viewModel.product?.name ?: "Details") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onCartClick) {
-                         Icon(Icons.Default.ShoppingCart, contentDescription = "Cart")
                     }
                 }
             )
         },
         bottomBar = {
-             if (product != null) {
-                 Surface(
+            viewModel.product?.let { product ->
+                val basePrice = product.price
+                val priceMod = (selectedVariant?.get("priceMod") as? Number)?.toDouble() ?: 0.0
+                val totalPrice = basePrice + priceMod
+
+                Surface(
                     tonalElevation = 8.dp,
                     shadowElevation = 8.dp
                 ) {
@@ -98,29 +110,42 @@ fun ProductDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = { 
-                                viewModel.addToCart {
-                                    Toast.makeText(context, "Added to cart", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = !viewModel.isAdding
-                        ) {
-                             Icon(Icons.Default.ShoppingCart, contentDescription = null)
-                             Spacer(modifier = Modifier.width(8.dp))
-                             Text("Add to Cart")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Total",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "₹${totalPrice.toInt()}",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                         Button(
-                            onClick = { 
-                                 viewModel.addToCart {
-                                    onCartClick()
+                            onClick = {
+                                if (checkoutHelper != null) {
+                                    val variantName = selectedVariant?.get("name") as? String ?: "Standard"
+                                    checkoutHelper.startPayment(
+                                        product = product,
+                                        variantName = variantName,
+                                        totalPrice = totalPrice,
+                                        onSuccess = { orderId ->
+                                            Toast.makeText(context, "Order Placed! ID: $orderId", Toast.LENGTH_LONG).show()
+                                        },
+                                        onError = { msg ->
+                                            Toast.makeText(context, "Error: $msg", Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                } else {
+                                    Toast.makeText(context, "Checkout not available", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            modifier = Modifier.weight(1f),
-                            enabled = !viewModel.isAdding
+                            modifier = Modifier.weight(1.5f)
                         ) {
                             Text("Buy Now")
                         }
@@ -129,10 +154,13 @@ fun ProductDetailScreen(
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (viewModel.isLoading) {
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)) {
+            if (viewModel.loading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (product != null) {
+            } else if (viewModel.product != null) {
+                val product = viewModel.product!!
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -143,81 +171,112 @@ fun ProductDetailScreen(
                         contentDescription = product.name,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(300.dp),
+                            .height(250.dp),
                         contentScale = ContentScale.Crop
                     )
-                    
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                             Text(
-                                text = product.name,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = "₹${product.price}",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                       
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        if (product.inStock) {
-                            Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp)) {
-                                Text(
-                                    "In Stock",
-                                    color = Color(0xFF2E7D32),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        } else {
-                             Surface(color = Color(0xFFFFEBEE), shape = RoundedCornerShape(4.dp)) {
-                                Text(
-                                    "Out of Stock",
-                                    color = Color(0xFFC62828),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Text("Description", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = product.description,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = product.name,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
                         )
                         
-                        if (product.quirks.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Text("Features", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            product.quirks.forEach { quirk ->
-                                Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Text("•", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(end = 8.dp))
-                                    Text(
-                                        text = quirk,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                        // Tags
+                        if (product.tags.isNotEmpty()) {
+                            Row(modifier = Modifier.padding(vertical = 8.dp)) {
+                                product.tags.forEach { tag ->
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        shape = RoundedCornerShape(4.dp),
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = tag.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Variants section
+                        if (product.variants.isNotEmpty()) {
+                            Text(
+                                "Select Edition",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            product.variants.forEach { variant ->
+                                val vName = variant["name"] as? String ?: ""
+                                val vDesc = variant["description"] as? String ?: ""
+                                val vPriceMod = (variant["priceMod"] as? Number)?.toDouble() ?: 0.0
+                                val isSelected = selectedVariant == variant
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clickable { selectedVariant = variant }
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                            shape = RoundedCornerShape(8.dp)
+                                        ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha=0.1f) else MaterialTheme.colorScheme.surface
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { selectedVariant = variant }
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(vName, fontWeight = FontWeight.Bold)
+                                            if (vDesc.isNotEmpty()) {
+                                                Text(vDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                        if (vPriceMod > 0) {
+                                            Text("+₹${vPriceMod.toInt()}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        // Compatible Modules List (ReadOnly)
+                        if (product.compatibleModules.isNotEmpty()) {
+                            Text(
+                                "Compatible Modules",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                            Text(
+                                "This platform supports ${product.compatibleModules.size} specific sensor/accessory modules.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             } else {
-                 Text("Product not found", modifier = Modifier.align(Alignment.Center))
+                Text(
+                    text = viewModel.error ?: "Unknown error",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.Center)
+                )
             }
         }
     }

@@ -40,6 +40,9 @@ android {
 
         val mqttPassword = localProperties.getProperty("mqtt_password") ?: System.getenv("MQTT_PASSWORD") ?: ""
         buildConfigField("String", "MQTT_PASSWORD", "\"$mqttPassword\"")
+
+        val razorpayKey = localProperties.getProperty("razorpay_key_id") ?: System.getenv("RAZORPAY_KEY_ID") ?: ""
+        buildConfigField("String", "RAZORPAY_KEY_ID", "\"$razorpayKey\"")
     }
 
     buildTypes {
@@ -100,4 +103,6 @@ dependencies {
     implementation(libs.paho.android.service)
     implementation(libs.androidx.localbroadcastmanager)
     implementation(libs.coil.compose)
+    implementation("com.razorpay:checkout:1.6.40")
+    implementation("com.google.android.gms:play-services-wallet:19.4.0")
 }
