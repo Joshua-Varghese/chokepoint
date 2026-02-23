@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import coil.compose.AsyncImage
+import com.joshua.chokepoint.ui.components.ProductImage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -177,8 +177,8 @@ fun ProductCard(
     ) {
         Column {
             Box(modifier = Modifier.height(140.dp)) {
-                AsyncImage(
-                    model = product.imageUrl,
+                ProductImage(
+                    imageUrl = product.imageUrl,
                     contentDescription = product.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop

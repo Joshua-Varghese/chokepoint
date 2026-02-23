@@ -5,6 +5,8 @@ import json
 import config
 from wifi_manager import WifiManager
 from umqtt.simple import MQTTClient
+import urequests
+import ota
 try:
     import mq135
 except ImportError:
@@ -17,6 +19,32 @@ device_id = ubinascii.hexlify(machine.unique_id()).decode()
 wm = WifiManager()
 mqtt = None
 discovery_service = None
+
+CURRENT_VERSION = "1.0.0"
+FIRESTORE_PROJECT_ID = "chokepoint-android"
+OTA_URL = f"https://firestore.googleapis.com/v1/projects/{FIRESTORE_PROJECT_ID}/databases/(default)/documents/system_config/firmware"
+
+def check_for_updates():
+    print(f"Checking for OTA updates (Current: {CURRENT_VERSION})...")
+    try:
+        r = urequests.get(OTA_URL)
+        if r.status_code == 200:
+            data = r.json()
+            fields = data.get("fields", {})
+            latest_version = fields.get("version", {}).get("stringValue", CURRENT_VERSION)
+            download_url = fields.get("url", {}).get("stringValue", "")
+            
+            if latest_version != CURRENT_VERSION and download_url:
+                print("New firmware found:", latest_version)
+                updater = ota.OTAUpdater()
+                updater.simple_update(download_url)
+            else:
+                print("Firmware is up to date.")
+        else:
+            print("OTA Check Failed. Status:", r.status_code)
+        r.close()
+    except Exception as e:
+        print("Update check failed:", e)
 
 # --- Sensor Mock if mq135 missing ---
 if mq135:
@@ -61,6 +89,8 @@ def main():
         print("WiFi Connection Failed or Config Missing.")
         wm.run_provisioning_server()
         return 
+
+    check_for_updates()
 
     # 3. Initialize Discovery
     try:

@@ -20,8 +20,11 @@ import com.joshua.chokepoint.ui.theme.TextLight
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(
     deviceId: String,
@@ -30,10 +33,9 @@ fun AnalyticsScreen(
 ) {
     val readings = remember { mutableStateListOf<SensorData>() }
     
-    // Simple state flow observation
     LaunchedEffect(deviceId) {
         if(deviceId.isNotEmpty()) {
-            repository.observeRecentReadings(deviceId, 50).collect { list ->
+            repository.observeRecentReadings(deviceId, 30).collect { list ->
                 readings.clear()
                 readings.addAll(list)
             }
@@ -64,6 +66,23 @@ fun AnalyticsScreen(
                     Text("No history yet. Wait for sensor data...", color = TextLight)
                 }
             } else {
+                Text(
+                    "CO₂ Trend (Last ${readings.size} readings)",
+                    color = TextLight,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CardGrey),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .height(200.dp)
+                ) {
+                    SensorChart(data = readings, modifier = Modifier.fillMaxSize().padding(16.dp))
+                }
+                
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -74,6 +93,34 @@ fun AnalyticsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun SensorChart(data: List<SensorData>, modifier: Modifier = Modifier) {
+    if (data.size < 2) return
+    val sorted = data.sortedBy { it.timestamp }
+    val maxVal = sorted.maxOfOrNull { it.co2 }?.coerceAtLeast(100.0) ?: 100.0
+    val minVal = sorted.minOfOrNull { it.co2 }?.coerceAtMost(0.0) ?: 0.0
+    val range = (maxVal - minVal).coerceAtLeast(1.0)
+
+    Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val stepX = width / (sorted.size - 1)
+        
+        val path = Path()
+        sorted.forEachIndexed { index, dp ->
+            val x = index * stepX
+            val y = height - (((dp.co2 - minVal) / range).toFloat() * height)
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        
+        drawPath(
+            path = path,
+            color = androidx.compose.ui.graphics.Color(0xFF34D399),
+            style = Stroke(width = 3.dp.toPx())
+        )
     }
 }
 

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { useNavigate } from 'react-router-dom';
-import { Router } from 'lucide-react';
+import { Upload } from 'lucide-react';
 
 export default function Devices() {
     const [devices, setDevices] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [firmware, setFirmware] = useState({ version: '', url: '' });
+    const [savingFirmware, setSavingFirmware] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -47,11 +49,78 @@ export default function Devices() {
             }
         };
         fetchDevicesAndUsers();
+
+        // Listen to current firmware
+        const unsub = onSnapshot(doc(db, 'system_config', 'firmware'), (docSnap) => {
+            if (docSnap.exists()) {
+                setFirmware(docSnap.data());
+            }
+        });
+
+        return () => unsub();
     }, []);
+
+    const handlePushFirmware = async () => {
+        if (!firmware.version || !firmware.url) return alert('Enter version and URL');
+        setSavingFirmware(true);
+        try {
+            await setDoc(doc(db, 'system_config', 'firmware'), {
+                version: firmware.version,
+                url: firmware.url,
+                updatedAt: new Date()
+            });
+            alert('Firmware update pushed to devices!');
+        } catch (e) {
+            console.error(e);
+            alert('Failed to push firmware');
+        } finally {
+            setSavingFirmware(false);
+        }
+    };
 
     return (
         <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1.5rem' }}>Device Management</h1>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: '700' }}>Device Management</h1>
+            </div>
+
+            <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Upload size={20} /> OTA Firmware Update
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '1rem', alignItems: 'end' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label>Target Version</label>
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="e.g., 1.0.2"
+                            value={firmware.version}
+                            onChange={(e) => setFirmware({ ...firmware, version: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label>Firmware File URL (.py or .bin)</label>
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="https://raw.githubusercontent.com/..."
+                            value={firmware.url}
+                            onChange={(e) => setFirmware({ ...firmware, url: e.target.value })}
+                        />
+                    </div>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handlePushFirmware}
+                        disabled={savingFirmware}
+                    >
+                        {savingFirmware ? 'Pushing...' : 'Push Update'}
+                    </button>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: '#71717a', marginTop: '1rem' }}>
+                    Devices will automatically download and apply this firmware upon their next boot or polling cycle. Ensure the URL points directly to the RAW file content.
+                </p>
+            </div>
             <div className="table-container">
                 <table>
                     <thead>

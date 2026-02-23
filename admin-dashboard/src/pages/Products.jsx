@@ -570,8 +570,11 @@ export default function Products() {
                                         onChange={(e) => {
                                             const file = e.target.files[0];
                                             if (file) {
-                                                const url = URL.createObjectURL(file);
-                                                setFormData({ ...formData, imageUrl: url, imageFile: file });
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => {
+                                                    setFormData({ ...formData, imageUrl: reader.result, imageFile: file });
+                                                };
+                                                reader.readAsDataURL(file);
                                             }
                                         }}
                                         style={{ fontSize: '0.875rem' }}

@@ -110,7 +110,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     viewModel.disconnect()
                     navController.navigate("login") { popUpTo("dashboard") { inclusive = true } }
                 },
-                onHistoryClick = { /* Navigate to analytics if implemented */ },
+                onHistoryClick = { deviceId -> navController.navigate("analytics/$deviceId") },
                 onMarketplaceClick = { navController.navigate("marketplace") },
                 onDevicesClick = { navController.navigate("devices") },
                 onAddDeviceClick = { navController.navigate("provisioning") },
@@ -143,6 +143,18 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 cartRepository = cartRepository,
                 onBackClick = { navController.popBackStack() },
                 onCartClick = { navController.navigate("cart") }
+            )
+        }
+
+        composable(
+            route = "analytics/{deviceId}",
+            arguments = listOf(navArgument("deviceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            AnalyticsScreen(
+                deviceId = deviceId,
+                repository = firestoreRepository,
+                onBackClick = { navController.popBackStack() }
             )
         }
 
