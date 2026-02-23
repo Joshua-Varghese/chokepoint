@@ -64,7 +64,7 @@ class FirestoreRepository {
         // For backwards compatibility during transition if needed
     }
 
-    fun claimDevice(deviceId: String, name: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+    fun claimDevice(deviceId: String, name: String, lat: Double? = null, lng: Double? = null, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
         if (userId == null) {
             onError(Exception("User not logged in"))
@@ -78,12 +78,17 @@ class FirestoreRepository {
 
         // 1. Global Registry (Create if not exists)
         val globalDeviceRef = devicesCollection.document(deviceId)
-        val globalData = hashMapOf(
+        val globalData: MutableMap<String, Any> = hashMapOf(
             "name" to name, 
             "adminId" to userId,
             "shareCode" to shareCode, // New: Save Share Code
             "registeredAt" to com.google.firebase.Timestamp.now()
         )
+        if (lat != null && lng != null) {
+            globalData["lat"] = lat
+            globalData["lng"] = lng
+        }
+
         // Use Merge so we don't wipe existing data, but we DO update the shareCode if we are claiming
         batch.set(globalDeviceRef, globalData, com.google.firebase.firestore.SetOptions.merge())
 

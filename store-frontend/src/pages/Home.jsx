@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import { renderToStaticMarkup } from 'react-dom/server';
 import 'leaflet/dist/leaflet.css';
 import { ArrowRight, Wind, ShieldCheck, Activity } from 'lucide-react';
 
@@ -21,15 +23,8 @@ export default function Home() {
     });
 
     // Map State
-    const [activeCity, setActiveCity] = useState({ name: 'Beijing', lat: 39.9042, lng: 116.4074, aqi: 152, level: 'Unhealthy' });
-
-    const CITIES = [
-        { name: 'Beijing', lat: 39.9042, lng: 116.4074, aqi: 152, level: 'Unhealthy' },
-        { name: 'New York', lat: 40.7128, lng: -74.0060, aqi: 45, level: 'Good' },
-        { name: 'London', lat: 51.5074, lng: -0.1278, aqi: 68, level: 'Moderate' },
-        { name: 'New Delhi', lat: 28.6139, lng: 77.2090, aqi: 305, level: 'Hazardous' },
-        { name: 'Tokyo', lat: 35.6762, lng: 139.6503, aqi: 42, level: 'Good' }
-    ];
+    const [activeCity, setActiveCity] = useState(null);
+    const [mapDevices, setMapDevices] = useState([]);
 
     // Leaflet Helper to fly to coordinates
     function MapController({ center }) {
@@ -53,7 +48,48 @@ export default function Home() {
                 setLoading(false);
             }
         }
+
+        async function fetchMapDevices() {
+            try {
+                const snap = await getDocs(collection(db, 'devices'));
+                const deviceList = [];
+                for (const docSnap of snap.docs) {
+                    const data = docSnap.data();
+                    if (data.lat && data.lng) {
+                        const readingsRef = collection(db, 'devices', docSnap.id, 'readings');
+                        const q = query(readingsRef, orderBy('timestamp', 'desc'), limit(1));
+                        const rSnap = await getDocs(q);
+
+                        let aqi = 0;
+                        let level = 'Offline';
+                        if (!rSnap.empty) {
+                            const rData = rSnap.docs[0].data();
+                            aqi = Math.floor((rData.co2 || 0) / 10) + Math.floor((rData.smoke || 0) * 5);
+                            if (aqi <= 50) level = 'Good';
+                            else if (aqi <= 100) level = 'Moderate';
+                            else if (aqi <= 150) level = 'Sensitive';
+                            else if (aqi <= 200) level = 'Unhealthy';
+                            else if (aqi <= 300) level = 'Very Unhealthy';
+                            else level = 'Hazardous';
+                        }
+
+                        deviceList.push({
+                            id: docSnap.id,
+                            name: data.name || 'Unnamed Device',
+                            lat: data.lat,
+                            lng: data.lng,
+                            aqi: aqi,
+                            level: level
+                        });
+                    }
+                }
+                setMapDevices(deviceList);
+                if (deviceList.length > 0) setActiveCity(deviceList[0]);
+            } catch (e) { console.error("Error fetching map devices", e); }
+        }
+
         fetchPlatforms();
+        fetchMapDevices();
     }, []);
 
     return (
@@ -117,64 +153,86 @@ export default function Home() {
 
                         {/* City Selector */}
                         <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
-                            {CITIES.map(city => (
+                            {mapDevices.map(device => (
                                 <button
-                                    key={city.name}
-                                    onClick={() => setActiveCity(city)}
-                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${activeCity.name === city.name
+                                    key={device.id}
+                                    onClick={() => setActiveCity(device)}
+                                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${activeCity?.id === device.id
                                         ? 'bg-blue-600 text-white'
                                         : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700'
                                         }`}
                                 >
-                                    {city.name}
+                                    {device.name}
                                 </button>
                             ))}
+                            {mapDevices.length === 0 && <span className="text-gray-500 text-sm py-2">Waiting for GPS devices...</span>}
                         </div>
                     </div>
 
                     <div className="h-[500px] w-full rounded-2xl overflow-hidden border border-zinc-700 shadow-2xl relative">
                         {/* Leaflet Map */}
-                        <MapContainer center={[activeCity.lat, activeCity.lng]} zoom={10} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#1a1a1a' }}>
-                            <MapController center={[activeCity.lat, activeCity.lng]} />
+                        <MapContainer center={activeCity ? [activeCity.lat, activeCity.lng] : [39.9, 116.4]} zoom={10} scrollWheelZoom={false} style={{ height: '100%', width: '100%', background: '#1a1a1a' }}>
+                            {activeCity && <MapController center={[activeCity.lat, activeCity.lng]} />}
                             {/* Dark Base Map */}
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                             />
-                            {/* WAQI Overlay */}
-                            <TileLayer
-                                attribution='Air Quality Tiles &copy; <a href="http://waqi.info">waqi.info</a>'
-                                url="https://tiles.waqi.info/tiles/usepa-aqi/{z}/{x}/{y}.png?token=demo"
-                            />
+                            {/* Firebase Markers */}
+                            {mapDevices.map(device => {
+                                const color = device.aqi > 150 ? '#ef4444' : device.aqi > 100 ? '#eab308' : '#22c55e';
+                                const iconHtml = renderToStaticMarkup(
+                                    <div style={{ backgroundColor: color, color: 'white', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                                        {device.aqi}
+                                    </div>
+                                );
+                                return (
+                                    <Marker
+                                        key={device.id}
+                                        position={[device.lat, device.lng]}
+                                        icon={L.divIcon({ className: 'custom-icon', html: iconHtml })}
+                                        eventHandlers={{ click: () => setActiveCity(device) }}
+                                    >
+                                        <Popup>
+                                            <div className="text-center font-bold">{device.name}</div>
+                                            <div className="text-center text-xs">AQI: {device.aqi}</div>
+                                        </Popup>
+                                    </Marker>
+                                );
+                            })}
                         </MapContainer>
 
                         {/* Overlay Card */}
-                        <div className="absolute top-6 right-6 z-[500] bg-black/80 backdrop-blur-md p-6 rounded-xl border border-zinc-700 w-64 shadow-2xl">
-                            <h4 className="text-white font-bold mb-4 flex items-center justify-between">
-                                Live Analysis
-                                <span className="text-xs font-normal text-gray-400 animate-pulse">● LIVE</span>
-                            </h4>
-                            <div className="space-y-4">
-                                <div>
-                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Location</div>
-                                    <div className="text-xl text-white font-mono">{activeCity.name}</div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
+                        {activeCity && (
+                            <div className="absolute top-6 right-6 z-[500] bg-black/80 backdrop-blur-md p-6 rounded-xl border border-zinc-700 w-64 shadow-2xl">
+                                <h4 className="text-white font-bold mb-4 flex items-center justify-between">
+                                    Live Analysis
+                                    <span className={`text-xs font-normal ${activeCity.level === 'Offline' ? 'text-gray-500' : 'text-gray-400 animate-pulse'}`}>
+                                        ● {activeCity.level === 'Offline' ? 'OFFLINE' : 'LIVE'}
+                                    </span>
+                                </h4>
+                                <div className="space-y-4">
                                     <div>
-                                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">AQI</div>
-                                        <div className={`text-2xl font-bold font-mono ${activeCity.aqi > 150 ? 'text-red-500' :
-                                            activeCity.aqi > 100 ? 'text-yellow-500' : 'text-green-500'
-                                            }`}>
-                                            {activeCity.aqi}
-                                        </div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Location</div>
+                                        <div className="text-xl text-white font-mono">{activeCity.name}</div>
                                     </div>
-                                    <div>
-                                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Status</div>
-                                        <div className="text-sm text-gray-300 font-medium mt-1">{activeCity.level}</div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">AQI</div>
+                                            <div className={`text-2xl font-bold font-mono ${activeCity.aqi > 150 ? 'text-red-500' :
+                                                activeCity.aqi > 100 ? 'text-yellow-500' : 'text-green-500'
+                                                }`}>
+                                                {activeCity.aqi}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Status</div>
+                                            <div className="text-sm text-gray-300 font-medium mt-1">{activeCity.level}</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             </section>
