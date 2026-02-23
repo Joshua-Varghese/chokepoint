@@ -15,8 +15,6 @@ import androidx.compose.ui.unit.dp
 import com.joshua.chokepoint.data.firestore.FirestoreRepository
 import com.joshua.chokepoint.data.model.SensorData
 import com.joshua.chokepoint.ui.theme.CardGrey
-import com.joshua.chokepoint.ui.theme.MintBackground
-import com.joshua.chokepoint.ui.theme.TextLight
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -35,26 +33,25 @@ fun AnalyticsScreen(
     
     LaunchedEffect(deviceId) {
         if(deviceId.isNotEmpty()) {
-            repository.observeRecentReadings(deviceId, 30).collect { list ->
-                readings.clear()
-                readings.addAll(list)
-            }
+            val history = repository.getHistoricalReadings(deviceId, 300)
+            readings.clear()
+            readings.addAll(history)
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sensor History", color = TextLight) },
+                title = { Text("Sensor History", color = MaterialTheme.colorScheme.onBackground) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextLight)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onBackground)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MintBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = MintBackground
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -63,12 +60,12 @@ fun AnalyticsScreen(
         ) {
             if (readings.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No history yet. Wait for sensor data...", color = TextLight)
+                    Text("No history yet. Wait for sensor data...", color = MaterialTheme.colorScheme.onBackground)
                 }
             } else {
                 Text(
                     "CO₂ Trend (Last ${readings.size} readings)",
-                    color = TextLight,
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
@@ -103,15 +100,18 @@ fun SensorChart(data: List<SensorData>, modifier: Modifier = Modifier) {
     val maxVal = sorted.maxOfOrNull { it.co2 }?.coerceAtLeast(100.0) ?: 100.0
     val minVal = sorted.minOfOrNull { it.co2 }?.coerceAtMost(0.0) ?: 0.0
     val range = (maxVal - minVal).coerceAtLeast(1.0)
+    
+    val minTime = sorted.first().timestamp
+    val maxTime = sorted.last().timestamp
+    val timeRange = (maxTime - minTime).coerceAtLeast(1L).toFloat()
 
     Canvas(modifier = modifier) {
         val width = size.width
         val height = size.height
-        val stepX = width / (sorted.size - 1)
         
         val path = Path()
         sorted.forEachIndexed { index, dp ->
-            val x = index * stepX
+            val x = if (timeRange > 0f) width * ((dp.timestamp - minTime).toFloat() / timeRange) else 0f
             val y = height - (((dp.co2 - minVal) / range).toFloat() * height)
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
@@ -139,20 +139,19 @@ fun HistoryCard(data: SensorData) {
         ) {
             Column {
                 Text(
-                    text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(data.timestamp),
+                    text = SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()).format(data.timestamp),
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextLight.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
                 Text(
                     text = "CO2: ${data.co2.toInt()} ppm",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = TextLight
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("NH3: ${String.format("%.2f", data.nh3)}", color = TextLight)
-                Text("Smoke: ${String.format("%.1f", data.smoke)}", color = TextLight)
+                Text("Smoke: ${String.format("%.1f", data.smoke)}", color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }

@@ -233,7 +233,11 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
-                if (pagerState.currentPage > 0) {
+                if (pagerState.currentPage == 0) {
+                    TextButton(onClick = { onHistoryClick("home") }) {
+                        Text("Reports", color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
                     val currentDevice = savedDevices[pagerState.currentPage - 1]
                     TextButton(onClick = { onHistoryClick(currentDevice.id) }) {
                         Text("Analytics", color = MaterialTheme.colorScheme.primary)
