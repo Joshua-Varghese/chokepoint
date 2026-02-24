@@ -25,6 +25,18 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.launch
 import com.joshua.chokepoint.ui.screens.*
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+
+fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
+}
 
 @Composable
 fun AppNavigation(modifier: Modifier = Modifier) {
@@ -54,12 +66,33 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 isLoading = false, // Should be managed by a ViewModel ideally
                 onLoginClick = { email, password ->
                     auth.signInWithEmailAndPassword(email, password)
-                        .addOnSuccessListener { navController.navigate("dashboard") { popUpTo("login") { inclusive = true } } }
+                        .addOnSuccessListener { authResult ->
+                            val user = authResult.user
+                            if (user != null) {
+                                firestoreRepository.syncUserProfile(
+                                    uid = user.uid,
+                                    email = user.email ?: email,
+                                    name = user.displayName ?: email.substringBefore("@"),
+                                    onSuccess = {
+                                        navController.navigate("dashboard") { popUpTo("login") { inclusive = true } }
+                                    },
+                                    onFailure = {
+                                        navController.navigate("dashboard") { popUpTo("login") { inclusive = true } }
+                                    }
+                                )
+                            }
+                        }
                         .addOnFailureListener { /* Handle error */ }
                 },
                 onGoogleSignInClick = {
                     coroutineScope.launch {
                         try {
+                            val activity = context.findActivity()
+                            if (activity == null) {
+                                Log.e("Auth", "Activity context not found for Google Sign-In")
+                                return@launch
+                            }
+                            
                             val googleIdOption = GetGoogleIdOption.Builder()
                                 .setFilterByAuthorizedAccounts(false)
                                 .setServerClientId("164679848850-ct4nn3gnb5hu61doi8oivd5lj9mpq66h.apps.googleusercontent.com")
@@ -70,7 +103,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                                 .addCredentialOption(googleIdOption)
                                 .build()
 
-                            val result = credentialManager.getCredential(context, request)
+                            val result = credentialManager.getCredential(activity, request)
                             val credential = result.credential
                             
                             if (credential is CustomCredential &&
@@ -83,7 +116,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                                     .addOnSuccessListener { authResult ->
                                         val user = authResult.user
                                         if (user != null) {
-                                            firestoreRepository.createUserProfile(
+                                            firestoreRepository.syncUserProfile(
                                                 uid = user.uid,
                                                 email = user.email ?: "",
                                                 name = user.displayName ?: "Google User",

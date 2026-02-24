@@ -104,6 +104,10 @@ class MqttRepository(
     }
 
     private fun subscribeToTopic(topic: String) {
+        if (mqttClient?.isConnected != true) {
+            Log.w("MQTT", "Cannot subscribe to $topic, client not connected yet")
+            return
+        }
         try {
             mqttClient?.subscribe(topic, 0, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
@@ -119,6 +123,7 @@ class MqttRepository(
     }
     
     private fun unsubscribeFromTopic(topic: String) {
+        if (mqttClient?.isConnected != true) return
         try {
              mqttClient?.unsubscribe(topic)
              Log.d("MQTT", "Unsubscribed from $topic")
