@@ -13,70 +13,40 @@ except ImportError:
     mq135 = None
 
 from discovery import Discovery
-import file_mgr
-print("Testing")
+
 # --- Global State ---
 device_id = ubinascii.hexlify(machine.unique_id()).decode()
 wm = WifiManager()
 mqtt = None
 discovery_service = None
-fm = file_mgr.FileManager()
 
 # ---- OTA UPGRADE CHECK ----
-CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "1.0.1"
+print("\n**************************************************")
+print("--> RUNNING NEW V1.0.1 OTA FIRMWARE UPDATE <--")
+print("**************************************************\n")
+
+FIRESTORE_PROJECT_ID = "chokepoint-android"
+OTA_URL = f"https://firestore.googleapis.com/v1/projects/{FIRESTORE_PROJECT_ID}/databases/(default)/documents/system_config/firmware"
 
 def check_for_updates():
-    if not config.GITHUB_PAT or not config.GITHUB_OWNER or not config.GITHUB_REPO:
-        print("GitHub Configuration missing in config.py. Skipping OTA.")
-        return
-
-    print("Checking GitHub for OTA updates...")
+    print(f"Checking for OTA updates (Current: {CURRENT_VERSION})...")
     try:
-        url = f"https://api.github.com/repos/{config.GITHUB_OWNER}/{config.GITHUB_REPO}/contents/firmware/main.py"
-        headers = {
-            "User-Agent": "ESP32-Chokepoint",
-            "Authorization": f"Bearer {config.GITHUB_PAT}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-        r = urequests.get(url, headers=headers)
+        r = urequests.get(OTA_URL)
         if r.status_code == 200:
             data = r.json()
-            remote_sha = data.get("sha", "")
-            download_url = data.get("download_url", "")
+            fields = data.get("fields", {})
+            latest_version = fields.get("version", {}).get("stringValue", CURRENT_VERSION)
+            download_url = fields.get("url", {}).get("stringValue", "")
             
-            local_sha = ""
-            try:
-                with open("version_sha.txt", "r") as f:
-                    local_sha = f.read().strip()
-            except:
-                pass
-            
-            if remote_sha and remote_sha != local_sha:
-                print("New firmware commit detected:", remote_sha)
-                
-                # Fetch private raw file using PAT
-                headers_raw = {
-                    "User-Agent": "ESP32-Chokepoint",
-                    "Authorization": f"Bearer {config.GITHUB_PAT}"
-                }
-                
+            if latest_version != CURRENT_VERSION and download_url:
+                print("New firmware found:", latest_version)
                 updater = ota.OTAUpdater()
-                success = updater.simple_update(download_url, headers=headers_raw)
-                
-                if success:
-                    with open("version_sha.txt", "w") as f:
-                        f.write(remote_sha)
-                    print("Update successfully applied. Rebooting!")
-                    import time
-                    time.sleep(1)
-                    machine.reset()
-                else:
-                    print("Firmware update download failed.")
+                updater.simple_update(download_url)
             else:
                 print("Firmware is up to date.")
         else:
-            print("GitHub API Check Failed. Status:", r.status_code)
-            print("Response:", r.text)
+            print("OTA Check Failed. Status:", r.status_code)
         r.close()
     except Exception as e:
         print("Update check failed:", e)
@@ -103,20 +73,6 @@ def mqtt_callback(topic, msg):
             machine.reset()
         elif cmd.get('cmd') == 'ping':
             mqtt.publish(f"chokepoint/devices/{device_id}/status", "pong")
-        elif cmd.get('cmd') == 'ls':
-            files = fm.list_files()
-            mqtt.publish(f"chokepoint/devices/{device_id}/res", json.dumps({"cmd": "ls", "files": files}))
-        elif cmd.get('cmd') == 'read':
-            content = fm.read_file(cmd.get('path', ''))
-            mqtt.publish(f"chokepoint/devices/{device_id}/res", json.dumps({"cmd": "read", "path": cmd.get('path', ''), "content": content}))
-        elif cmd.get('cmd') == 'write':
-            status = fm.write_file(cmd.get('path', ''), cmd.get('content', ''))
-            mqtt.publish(f"chokepoint/devices/{device_id}/res", json.dumps({"cmd": "write", "path": cmd.get('path', ''), "status": status}))
-        elif cmd.get('cmd') == 'rm':
-            status = fm.delete_file(cmd.get('path', ''))
-            mqtt.publish(f"chokepoint/devices/{device_id}/res", json.dumps({"cmd": "rm", "path": cmd.get('path', ''), "status": status}))
-        elif cmd.get('cmd') == 'restart':
-            machine.reset()
     except:
         pass
 

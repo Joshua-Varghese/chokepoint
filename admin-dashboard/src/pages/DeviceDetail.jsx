@@ -41,7 +41,7 @@ export default function DeviceDetail() {
         client.on('connect', () => {
             console.log("MQTT Connected");
             setStatus('connected');
-            client.subscribe(`devices/${id}/res`, (err) => {
+            client.subscribe(`chokepoint/devices/${id}/res`, (err) => {
                 if (!err) console.log("Subscribed to responses");
             });
         });
@@ -86,7 +86,7 @@ export default function DeviceDetail() {
 
     const sendCmd = (payload) => {
         if (!mqttClient) return;
-        mqttClient.publish(`devices/${id}/cmd`, JSON.stringify(payload));
+        mqttClient.publish(`chokepoint/devices/${id}/cmd`, JSON.stringify(payload));
         setConsoleLogs(prev => [`[CMD] ${payload.cmd} ${payload.path || ''}`, ...prev]);
     };
 
