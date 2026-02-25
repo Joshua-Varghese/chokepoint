@@ -72,7 +72,8 @@ export default function Products() {
         name: '', price: '', stock: '', category: 'monitors',
         type: 'base', imageUrl: '',
         slots: [], compatibleModules: [], defaultModules: [], tags: [], variants: [],
-        visibility: 'featured'
+        visibility: 'featured',
+        badges: []
     });
 
     const fetchData = async () => {
@@ -114,7 +115,8 @@ export default function Products() {
             defaultModules: product.defaultModules || [],
             variants: product.variants || [],
             tags: product.tags || [],
-            visibility: product.visibility || 'featured'
+            visibility: product.visibility || 'featured',
+            badges: product.badges || []
         });
         setEditingId(product.id);
         setIsModalOpen(true);
@@ -146,6 +148,7 @@ export default function Products() {
                 type: formData.type,
                 imageUrl: formData.imageUrl || 'https://via.placeholder.com/150',
                 tags: formData.tags || [],
+                badges: formData.badges || [],
                 visibility: 'featured',
                 updatedAt: serverTimestamp(),
                 slots: formData.slots || [],
@@ -175,7 +178,7 @@ export default function Products() {
         setIsModalOpen(false);
         setEditingId(null);
         setModuleSearch('');
-        setFormData({ name: '', price: '', stock: '', category: 'monitors', type: 'base', imageUrl: '', slots: [], compatibleModules: [], defaultModules: [], tags: [], variants: [], visibility: 'featured' });
+        setFormData({ name: '', price: '', stock: '', category: 'monitors', type: 'base', imageUrl: '', slots: [], compatibleModules: [], defaultModules: [], tags: [], variants: [], visibility: 'featured', badges: [] });
     };
 
     return (
@@ -229,6 +232,7 @@ export default function Products() {
                             <th>Variants</th>
                             <th>Modules</th>
                             <th>Tags</th>
+                            <th>Badges</th>
                             <th style={{ textAlign: 'right' }}>Actions</th>
                         </tr>
                     </thead>
@@ -258,6 +262,24 @@ export default function Products() {
                                                 {tag}
                                             </span>
                                         ))}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                                        {(p.badges || []).map(badge => {
+                                            const badgeStyles = {
+                                                'New Arrival': { bg: '#fef9c3', color: '#854d0e' },
+                                                'Best Seller': { bg: '#fce7f3', color: '#9d174d' },
+                                                'Featured': { bg: '#e0f2fe', color: '#075985' },
+                                                'Staff Pick': { bg: '#f0fdf4', color: '#166534' },
+                                            };
+                                            const s = badgeStyles[badge] || { bg: '#f1f5f9', color: '#475569' };
+                                            return (
+                                                <span key={badge} style={{ padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 600, background: s.bg, color: s.color }}>
+                                                    {badge}
+                                                </span>
+                                            );
+                                        })}
                                     </div>
                                 </td>
                                 <td style={{ textAlign: 'right' }}>
@@ -480,6 +502,53 @@ export default function Products() {
                                 </div>
                             </div>
 
+                            {/* App Badges */}
+                            <div style={{ background: '#fffbeb', padding: '1rem', borderRadius: '8px', border: '1px solid #fde68a' }}>
+                                <label className="label" style={{ fontWeight: 'bold', color: '#92400e' }}>📱 App Badges</label>
+                                <p style={{ fontSize: '0.8rem', color: '#78350f', marginBottom: '0.75rem' }}>
+                                    Products with at least one badge will appear in the Android app. Leave empty to hide from app.
+                                </p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    {[
+                                        { label: '🆕 New Arrival', value: 'New Arrival', active: '#f59e0b', activeBg: '#fef3c7', activeTxt: '#92400e' },
+                                        { label: '🔥 Best Seller', value: 'Best Seller', active: '#ec4899', activeBg: '#fce7f3', activeTxt: '#9d174d' },
+                                        { label: '⭐ Featured', value: 'Featured', active: '#0284c7', activeBg: '#e0f2fe', activeTxt: '#075985' },
+                                        { label: '✅ Staff Pick', value: 'Staff Pick', active: '#16a34a', activeBg: '#f0fdf4', activeTxt: '#166534' },
+                                    ].map(({ label, value, active, activeBg, activeTxt }) => {
+                                        const isActive = (formData.badges || []).includes(value);
+                                        return (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = formData.badges || [];
+                                                    if (isActive) {
+                                                        setFormData({ ...formData, badges: current.filter(b => b !== value) });
+                                                    } else {
+                                                        setFormData({ ...formData, badges: [...current, value] });
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '0.35rem 0.9rem', borderRadius: '999px', border: '1.5px solid',
+                                                    borderColor: isActive ? active : '#d1d5db',
+                                                    background: isActive ? activeBg : 'white',
+                                                    color: isActive ? activeTxt : '#6b7280',
+                                                    fontSize: '0.85rem', fontWeight: isActive ? 600 : 400,
+                                                    cursor: 'pointer', transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {(formData.badges || []).length === 0 && (
+                                    <p style={{ fontSize: '0.75rem', color: '#b45309', marginTop: '0.5rem' }}>
+                                        ⚠️ No badges selected — this product will be hidden from the Android app.
+                                    </p>
+                                )}
+                            </div>
+
                             {/* Image */}
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Product Image</label>
@@ -501,8 +570,11 @@ export default function Products() {
                                         onChange={(e) => {
                                             const file = e.target.files[0];
                                             if (file) {
-                                                const url = URL.createObjectURL(file);
-                                                setFormData({ ...formData, imageUrl: url, imageFile: file });
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => {
+                                                    setFormData({ ...formData, imageUrl: reader.result, imageFile: file });
+                                                };
+                                                reader.readAsDataURL(file);
                                             }
                                         }}
                                         style={{ fontSize: '0.875rem' }}

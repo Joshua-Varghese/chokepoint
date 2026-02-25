@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import React, { useState, useEffect, Fragment } from 'react';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase-config';
-import { Package, ChevronDown, ChevronUp, Search, Filter } from 'lucide-react';
+import { Package, ChevronDown, ChevronUp, Search, Filter, Printer, MessageSquare, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Orders() {
     const [orders, setOrders] = useState([]);
@@ -10,6 +12,17 @@ export default function Orders() {
     const [expandedOrder, setExpandedOrder] = useState(null);
     const [filterStatus, setFilterStatus] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Enterprise Handling States
+    const [trackingInput, setTrackingInput] = useState({ provider: '', number: '' });
+    const [noteInput, setNoteInput] = useState('');
+
+    // Confirmation Modal State
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        orderId: null,
+        newStatus: null
+    });
 
     useEffect(() => {
         const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -25,10 +38,151 @@ export default function Orders() {
         return () => unsubscribe();
     }, []);
 
+    const handleSaveTracking = async (orderId) => {
+        if (!trackingInput.provider || !trackingInput.provider.trim() || !trackingInput.number || !trackingInput.number.trim()) {
+            toast.error('Both Courier Provider and Tracking Number are required.');
+            return;
+        }
+
+        try {
+            const orderRef = doc(db, 'orders', orderId);
+            await updateDoc(orderRef, {
+                tracking: {
+                    provider: trackingInput.provider.trim(),
+                    number: trackingInput.number.trim(),
+                    updatedAt: new Date().toISOString()
+                }
+            });
+            toast.success('Tracking details updated successfully');
+        } catch (error) {
+            console.error('Error saving tracking:', error);
+            toast.error('Failed to update tracking details');
+        }
+    };
+
+    const handleAddNote = async (orderId) => {
+        if (!noteInput || !noteInput.trim()) {
+            toast.error('Note cannot be empty.');
+            return;
+        }
+
+        try {
+            await updateDoc(doc(db, 'orders', orderId), {
+                notes: arrayUnion({
+                    text: noteInput,
+                    timestamp: new Date().toISOString(),
+                    author: "Admin"
+                })
+            });
+            setNoteInput('');
+            toast.success("Note added");
+        } catch (error) {
+            toast.error("Failed to add note");
+        }
+    };
+
+    const handlePrintInvoice = (orderId) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) {
+            toast.error("Order not found for printing.");
+            return;
+        }
+
+        const doc = new jsPDF();
+
+        // Header
+        doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
+        doc.text('CHOKEPOINT', 14, 22);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100);
+        doc.text('Official Order Invoice', 14, 30);
+
+        // Order Meta
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Order ID: #${order.id}`, 14, 45);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        const dateStr = order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : 'N/A';
+        doc.text(`Date: ${dateStr}`, 14, 52);
+        doc.text(`Status: ${order.status.toUpperCase()}`, 14, 59);
+
+        // Customer Details (Right Aligned)
+        const pageWidth = doc.internal.pageSize.width;
+        doc.setFont("helvetica", "bold");
+        doc.text('Billed To:', pageWidth - 14, 45, { align: 'right' });
+        doc.setFont("helvetica", "normal");
+        doc.text(`${order.customer?.firstName} ${order.customer?.lastName}`, pageWidth - 14, 52, { align: 'right' });
+        doc.text(`${order.customer?.email}`, pageWidth - 14, 59, { align: 'right' });
+        doc.text(`${order.customer?.phone || ''}`, pageWidth - 14, 66, { align: 'right' });
+        doc.text(`${order.customer?.address}`, pageWidth - 14, 73, { align: 'right' });
+        doc.text(`${order.customer?.city}, ${order.customer?.state} ${order.customer?.zip}`, pageWidth - 14, 80, { align: 'right' });
+
+        // Items Table
+        const tableColumn = ["Item Description", "Variant", "Quantity", "Unit Price", "Total"];
+        const tableRows = [];
+
+        if (order.items && order.items.length > 0) {
+            order.items.forEach(item => {
+                const itemData = [
+                    item.baseProduct?.name || 'Unknown Product',
+                    item.variant?.name || 'Default',
+                    item.quantity || 1,
+                    `Rs. ${item.totalPrice?.toLocaleString() || 0}`,
+                    `Rs. ${(item.totalPrice * (item.quantity || 1))?.toLocaleString() || 0}`
+                ];
+                tableRows.push(itemData);
+            });
+        }
+
+        autoTable(doc, {
+            startY: 95,
+            head: [tableColumn],
+            body: tableRows,
+            theme: 'grid',
+            headStyles: { fillColor: [24, 24, 27], textColor: 255 }, // Zinc 900
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: {
+                0: { cellWidth: 70 },
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'right' }
+            }
+        });
+
+        // Totals
+        const finalY = doc.lastAutoTable?.finalY || 150;
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Grand Total: Rs. ${order.total?.toLocaleString()}`, pageWidth - 14, finalY + 15, { align: 'right' });
+
+        // Footer
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(150);
+        doc.text('Thank you for shopping with Chokepoint!', 14, doc.internal.pageSize.height - 20);
+
+        doc.save(`chokepoint-invoice-${order.id}.pdf`);
+    };
+
+    const confirmStatusUpdate = (orderId, newStatus) => {
+        if (newStatus === 'cancelled' || newStatus === 'refunded') {
+            setConfirmModal({ isOpen: true, orderId, newStatus });
+        } else {
+            handleStatusUpdate(orderId, newStatus);
+        }
+    };
+
     const handleStatusUpdate = async (orderId, newStatus) => {
         try {
             await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
             toast.success(`Order status updated to ${newStatus}`);
+            setConfirmModal({ isOpen: false, orderId: null, newStatus: null });
         } catch (error) {
             console.error("Error updating status:", error);
             toast.error("Failed to update status");
@@ -42,6 +196,7 @@ export default function Orders() {
             case 'shipped': return 'bg-blue-100 text-blue-800';
             case 'delivered': return 'bg-purple-100 text-purple-800';
             case 'cancelled': return 'bg-red-100 text-red-800';
+            case 'refunded': return 'bg-orange-100 text-orange-800';
             default: return 'bg-gray-100 text-gray-800';
         }
     };
@@ -49,10 +204,10 @@ export default function Orders() {
     const filteredOrders = orders.filter(order => {
         const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
         const matchesSearch = searchTerm === '' ||
-            order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.customer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.customer.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (order.paymentId && order.paymentId.toLowerCase().includes(searchTerm.toLowerCase()));
 
         return matchesStatus && matchesSearch;
@@ -94,6 +249,7 @@ export default function Orders() {
                         <option value="shipped">Shipped</option>
                         <option value="delivered">Delivered</option>
                         <option value="cancelled">Cancelled</option>
+                        <option value="refunded">Refunded</option>
                     </select>
                 </div>
             </div>
@@ -114,29 +270,29 @@ export default function Orders() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredOrders.map((order) => (
-                                <>
-                                    <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                                <Fragment key={order.id}>
+                                    <tr className="hover:bg-gray-50 transition-colors">
                                         <td className="p-4 font-mono text-xs">{order.id.slice(0, 8)}...</td>
                                         <td className="p-4 text-gray-500">
-                                            {order.createdAt?.toDate().toLocaleDateString()}
+                                            {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString() : 'N/A'}
                                         </td>
                                         <td className="p-4">
                                             <div className="font-medium text-gray-900">
-                                                {order.customer.firstName} {order.customer.lastName}
+                                                {order.customer?.firstName || 'Unknown'} {order.customer?.lastName || ''}
                                             </div>
-                                            <div className="text-xs text-gray-500">{order.customer.email}</div>
+                                            <div className="text-xs text-gray-500">{order.customer?.email || 'N/A'}</div>
                                         </td>
-                                        <td className="p-4 font-medium">₹{order.total.toLocaleString()}</td>
+                                        <td className="p-4 font-medium">₹{order.total?.toLocaleString() || '0'}</td>
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
-                                                {order.status.replace('_', ' ').toUpperCase()}
+                                                {order.status ? order.status.replace('_', ' ').toUpperCase() : 'UNKNOWN'}
                                             </span>
                                         </td>
                                         <td className="p-4">
                                             <select
                                                 className="text-xs border border-gray-200 rounded p-1"
                                                 value={order.status}
-                                                onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
+                                                onChange={(e) => confirmStatusUpdate(order.id, e.target.value)}
                                             >
                                                 <option value="pending_payment">Pending Payment</option>
                                                 <option value="paid">Paid</option>
@@ -144,6 +300,7 @@ export default function Orders() {
                                                 <option value="shipped">Shipped</option>
                                                 <option value="delivered">Delivered</option>
                                                 <option value="cancelled">Cancelled</option>
+                                                <option value="refunded">Refunded</option>
                                             </select>
                                         </td>
                                         <td className="p-4 text-right">
@@ -157,57 +314,140 @@ export default function Orders() {
                                     </tr>
 
                                     {expandedOrder === order.id && (
-                                        <tr className="bg-gray-50">
-                                            <td colSpan="7" className="p-4">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                    {/* Order Items */}
-                                                    <div>
-                                                        <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                                                            <Package size={16} /> Items
-                                                        </h4>
-                                                        <div className="space-y-2">
-                                                            {order.items.map((item, idx) => (
-                                                                <div key={idx} className="flex gap-3 text-sm bg-white p-2 rounded border border-gray-100">
-                                                                    <div className="w-10 h-10 bg-gray-100 rounded overflow-hidden">
-                                                                        <img src={item.baseProduct.image} alt="" className="w-full h-full object-cover" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <div className="font-medium">{item.baseProduct.name}</div>
-                                                                        <div className="text-gray-500 text-xs">
-                                                                            {item.variant.name} • {item.modules.length} Modules
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="ml-auto font-medium">
-                                                                        ₹{item.totalPrice.toLocaleString()}
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                                        <tr className="expanded-row">
+                                            <td colSpan="7" style={{ padding: 0 }}>
+                                                <div className="expanded-container">
+
+                                                    <div className="expanded-header">
+                                                        <div>
+                                                            <div className="expanded-title">Order #{order.id}</div>
+                                                            <div className="expanded-subtitle">Placed on {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : 'N/A'}</div>
                                                         </div>
+                                                        <button onClick={() => handlePrintInvoice(order.id)} className="btn btn-outline">
+                                                            <Printer size={16} /> Print Slip
+                                                        </button>
                                                     </div>
 
-                                                    {/* Shipping Details */}
-                                                    <div className="text-sm">
-                                                        <h4 className="font-semibold text-gray-900 mb-2">Shipping Address</h4>
-                                                        <div className="bg-white p-3 rounded border border-gray-100 text-gray-600 space-y-1">
-                                                            <p>{order.customer.address}</p>
-                                                            <p>{order.customer.city}, {order.customer.state}</p>
-                                                            <p>{order.customer.country} - {order.customer.zip}</p>
-                                                            <div className="mt-2 pt-2 border-t border-gray-100">
-                                                                <p>📞 {order.customer.phone}</p>
-                                                                <p>✉️ {order.customer.email}</p>
-                                                            </div>
-                                                            {order.paymentId && (
-                                                                <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-400">
-                                                                    Payment ID: <span className="font-mono">{order.paymentId}</span>
+                                                    <div className="expanded-grid">
+
+                                                        {/* Left Column: Items & Timeline */}
+                                                        <div className="expanded-col-main">
+                                                            <div className="panel-card">
+                                                                <div className="panel-title">
+                                                                    <Package size={16} /> Products
                                                                 </div>
-                                                            )}
+
+                                                                <div>
+                                                                    {order.items?.map((item, idx) => (
+                                                                        <div key={idx} className="item-row">
+                                                                            <img src={item.baseProduct?.image || ''} alt="" className="item-image" />
+                                                                            <div className="item-details">
+                                                                                <div className="item-name">{item.baseProduct?.name || 'Unknown Product'}</div>
+                                                                                <div className="item-meta">Variant: {item.variant?.name || 'Default'}</div>
+                                                                            </div>
+                                                                            <div className="item-price">
+                                                                                <div className="item-price-val">₹{(item.totalPrice * (item.quantity || 1))?.toLocaleString() || '0'}</div>
+                                                                                <div className="item-meta">Qty: {item.quantity || 1}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+
+                                                                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>TOTAL AMOUNT</span>
+                                                                    <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>₹{order.total?.toLocaleString() || '0'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Right Column: Fulfillment & Logistics */}
+                                                        <div className="expanded-col-side">
+
+                                                            <div className="panel-card">
+                                                                <div className="panel-title">
+                                                                    Customer Profile
+                                                                </div>
+                                                                <div className="info-text">
+                                                                    <strong>{order.customer?.firstName} {order.customer?.lastName}</strong>
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '1rem', fontSize: '0.8rem' }}>
+                                                                        <span>✉ {order.customer?.email || 'N/A'}</span>
+                                                                        <span>📞 {order.customer?.phone || 'N/A'}</span>
+                                                                    </div>
+                                                                    <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)', fontSize: '0.8rem' }}>
+                                                                        <div>{order.customer?.address}</div>
+                                                                        <div>{order.customer?.city}, {order.customer?.state} {order.customer?.zip}</div>
+                                                                        <div style={{ textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 600, marginTop: '4px' }}>{order.customer?.country}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="panel-card">
+                                                                <div className="panel-title">
+                                                                    <Truck size={16} /> Logistics
+                                                                </div>
+                                                                {order.status === 'shipped' || order.status === 'delivered' ? (
+                                                                    order.tracking?.number ? (
+                                                                        <div>
+                                                                            <div className="tracking-box">
+                                                                                <div className="tracking-provider">{order.tracking.provider}</div>
+                                                                                <div className="tracking-number">{order.tracking.number}</div>
+                                                                            </div>
+                                                                            <button onClick={() => setTrackingInput(order.tracking)} style={{ backgroundColor: 'transparent', border: 'none', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Update Dispatch Details</button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                                                            <input type="text" placeholder="Courier Provider" className="input" value={trackingInput.provider} onChange={(e) => setTrackingInput({ ...trackingInput, provider: e.target.value })} />
+                                                                            <input type="text" placeholder="Tracking Number" className="input" style={{ fontFamily: 'monospace' }} value={trackingInput.number} onChange={(e) => setTrackingInput({ ...trackingInput, number: e.target.value })} />
+                                                                            <button onClick={() => handleSaveTracking(order.id)} className="btn btn-primary" style={{ width: '100%' }}>Assign Tracking</button>
+                                                                        </div>
+                                                                    )
+                                                                ) : (
+                                                                    <div style={{ padding: '1rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', color: '#92400e', fontSize: '0.875rem' }}>
+                                                                        Tracking assignment unlocks when order is escalated to <b>Shipped</b>.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="panel-card" style={{ padding: 0, display: 'flex', flexDirection: 'column', maxHeight: '320px' }}>
+                                                                <div className="panel-title" style={{ margin: 0, padding: '1rem', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-hover)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                                                                    <MessageSquare size={16} /> Admin Thread
+                                                                </div>
+                                                                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', backgroundColor: '#fafafa' }}>
+                                                                    {order.notes?.length > 0 ? order.notes.map((note, idx) => (
+                                                                        <div key={idx} className="note-bubble">
+                                                                            <div>{note.text}</div>
+                                                                            <div className="note-bubble-meta">{note.author} • {new Date(note.timestamp).toLocaleDateString()}</div>
+                                                                        </div>
+                                                                    )) : (
+                                                                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                                            No internal logs.
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg-panel)', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Drop a private note..."
+                                                                        className="input"
+                                                                        value={noteInput}
+                                                                        onChange={(e) => setNoteInput(e.target.value)}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                handleAddNote(order.id);
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
                                         </tr>
                                     )}
-                                </>
+                                </Fragment>
                             ))}
 
                             {filteredOrders.length === 0 && (
@@ -221,6 +461,33 @@ export default function Orders() {
                     </table>
                 </div>
             </div>
+
+            {/* Confirmation Modal */}
+            {confirmModal.isOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Action</h3>
+                        <p className="text-gray-600 mb-6">
+                            Are you sure you want to mark this order as <span className="font-bold text-red-600">{confirmModal.newStatus.toUpperCase()}</span>?
+                            This action may have financial implications and notify the customer.
+                        </p>
+                        <div className="flex gap-3 justify-center">
+                            <button
+                                onClick={() => setConfirmModal({ isOpen: false, orderId: null, newStatus: null })}
+                                className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleStatusUpdate(confirmModal.orderId, confirmModal.newStatus)}
+                                className="px-4 py-2 bg-red-600 text-white font-medium hover:bg-red-700 rounded-lg transition-colors"
+                            >
+                                Yes, Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

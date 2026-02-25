@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { CheckCircle, ArrowLeft } from 'lucide-react';
@@ -14,12 +15,25 @@ export default function Checkout() {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [orderId, setOrderId] = useState(null);
+    const { currentUser } = useAuth();
     const { Razorpay } = useRazorpay();
 
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', email: '', phone: '',
         address: '', country: 'IN', state: '', city: '', zip: ''
     });
+
+    useEffect(() => {
+        if (currentUser) {
+            const nameParts = (currentUser.displayName || '').split(' ');
+            setFormData(prev => ({
+                ...prev,
+                email: prev.email || currentUser.email || '',
+                firstName: prev.firstName || nameParts[0] || '',
+                lastName: prev.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '')
+            }));
+        }
+    }, [currentUser]);
 
     if (cart.length === 0 && !success) {
         return (
@@ -86,6 +100,7 @@ export default function Checkout() {
                 total: cartTotal,
                 customer: {
                     ...formData,
+                    userId: currentUser ? currentUser.uid : null,
                     country: Country.getCountryByCode(formData.country)?.name || formData.country,
                     state: State.getStateByCodeAndCountry(formData.state, formData.country)?.name || formData.state
                 },

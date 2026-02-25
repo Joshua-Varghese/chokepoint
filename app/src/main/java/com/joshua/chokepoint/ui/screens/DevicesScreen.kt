@@ -62,6 +62,39 @@ fun DevicesScreen(
     val scope = rememberCoroutineScope()
     val repo = remember { com.joshua.chokepoint.data.firestore.FirestoreRepository() }
 
+    val performClaim: (Double?, Double?) -> Unit = { lat, lng ->
+        repo.claimDevice(
+            deviceId = claimDeviceId.trim(),
+            name = claimDeviceName.ifBlank { "My Device" },
+            lat = lat,
+            lng = lng,
+            onSuccess = {
+                showClaimDialog = false
+                android.widget.Toast.makeText(context, "Device Claimed Successfully!", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onError = { e ->
+                android.widget.Toast.makeText(context, "Error: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    val requestPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.getOrDefault(android.Manifest.permission.ACCESS_FINE_LOCATION, false) ||
+            permissions.getOrDefault(android.Manifest.permission.ACCESS_COARSE_LOCATION, false)) {
+            try {
+                com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context).lastLocation
+                    .addOnSuccessListener { location -> performClaim(location?.latitude, location?.longitude) }
+                    .addOnFailureListener { performClaim(null, null) }
+            } catch (e: SecurityException) {
+                performClaim(null, null)
+            }
+        } else {
+            performClaim(null, null)
+        }
+    }
+
     // Rename Dialog
     if (showEditDialog && selectedDevice != null) {
         AlertDialog(
@@ -221,17 +254,25 @@ fun DevicesScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        repo.claimDevice(
-                            deviceId = claimDeviceId.trim(),
-                            name = claimDeviceName.ifBlank { "My Device" },
-                            onSuccess = {
-                                showClaimDialog = false
-                                android.widget.Toast.makeText(context, "Device Claimed Successfully!", android.widget.Toast.LENGTH_SHORT).show()
-                            },
-                            onError = { e ->
-                                android.widget.Toast.makeText(context, "Error: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                        val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        
+                        if (hasFine || hasCoarse) {
+                            try {
+                                com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context).lastLocation
+                                    .addOnSuccessListener { location -> performClaim(location?.latitude, location?.longitude) }
+                                    .addOnFailureListener { performClaim(null, null) }
+                            } catch (e: SecurityException) {
+                                performClaim(null, null)
                             }
-                        )
+                        } else {
+                            requestPermissionLauncher.launch(
+                                arrayOf(
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
                     }
                 ) { Text("Claim") }
             },

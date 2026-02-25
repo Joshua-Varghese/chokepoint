@@ -16,7 +16,27 @@ import com.joshua.chokepoint.data.repository.CartRepositoryImpl
 import com.joshua.chokepoint.data.repository.MarketplaceRepositoryImpl
 import com.joshua.chokepoint.data.discovery.DiscoveryRepository
 import com.joshua.chokepoint.data.repository.SettingsRepository
+import android.util.Log
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.launch
 import com.joshua.chokepoint.ui.screens.*
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+
+fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
+}
 
 @Composable
 fun AppNavigation(modifier: Modifier = Modifier) {
@@ -24,6 +44,8 @@ fun AppNavigation(modifier: Modifier = Modifier) {
     val auth = FirebaseAuth.getInstance()
     val startDestination = if (auth.currentUser != null) "dashboard" else "login"
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
 
     // Repositories
     // Using remember to keep instances across recompositions
@@ -44,10 +66,78 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 isLoading = false, // Should be managed by a ViewModel ideally
                 onLoginClick = { email, password ->
                     auth.signInWithEmailAndPassword(email, password)
-                        .addOnSuccessListener { navController.navigate("dashboard") { popUpTo("login") { inclusive = true } } }
+                        .addOnSuccessListener { authResult ->
+                            val user = authResult.user
+                            if (user != null) {
+                                firestoreRepository.syncUserProfile(
+                                    uid = user.uid,
+                                    email = user.email ?: email,
+                                    name = user.displayName ?: email.substringBefore("@"),
+                                    onSuccess = {
+                                        navController.navigate("dashboard") { popUpTo("login") { inclusive = true } }
+                                    },
+                                    onFailure = {
+                                        navController.navigate("dashboard") { popUpTo("login") { inclusive = true } }
+                                    }
+                                )
+                            }
+                        }
                         .addOnFailureListener { /* Handle error */ }
                 },
-                onGoogleSignInClick = { /* Handle Google Sign In */ },
+                onGoogleSignInClick = {
+                    coroutineScope.launch {
+                        try {
+                            val activity = context.findActivity()
+                            if (activity == null) {
+                                Log.e("Auth", "Activity context not found for Google Sign-In")
+                                return@launch
+                            }
+                            
+                            val googleIdOption = GetGoogleIdOption.Builder()
+                                .setFilterByAuthorizedAccounts(false)
+                                .setServerClientId("164679848850-ct4nn3gnb5hu61doi8oivd5lj9mpq66h.apps.googleusercontent.com")
+                                .setAutoSelectEnabled(true)
+                                .build()
+                                
+                            val request = GetCredentialRequest.Builder()
+                                .addCredentialOption(googleIdOption)
+                                .build()
+
+                            val result = credentialManager.getCredential(activity, request)
+                            val credential = result.credential
+                            
+                            if (credential is CustomCredential &&
+                                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                val idToken = googleIdTokenCredential.idToken
+                                val firebaseAuthWithGoogle = GoogleAuthProvider.getCredential(idToken, null)
+                                
+                                auth.signInWithCredential(firebaseAuthWithGoogle)
+                                    .addOnSuccessListener { authResult ->
+                                        val user = authResult.user
+                                        if (user != null) {
+                                            firestoreRepository.syncUserProfile(
+                                                uid = user.uid,
+                                                email = user.email ?: "",
+                                                name = user.displayName ?: "Google User",
+                                                onSuccess = {
+                                                    navController.navigate("dashboard") { popUpTo("login") { inclusive = true } }
+                                                },
+                                                onFailure = {
+                                                    navController.navigate("dashboard") { popUpTo("login") { inclusive = true } }
+                                                }
+                                            )
+                                        }
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e("Auth", "Firebase Google Sign-In failed", e)
+                                    }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("Auth", "Google Sign-In failed", e)
+                        }
+                    }
+                },
                 onForgotPasswordClick = { navController.navigate("forgot_password") },
                 onBackClick = { /* No back from login usually, or exit app */ },
                 onSignUpClick = { navController.navigate("signup") }
@@ -110,7 +200,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     viewModel.disconnect()
                     navController.navigate("login") { popUpTo("dashboard") { inclusive = true } }
                 },
-                onHistoryClick = { /* Navigate to analytics if implemented */ },
+                onHistoryClick = { deviceId -> navController.navigate("analytics/$deviceId") },
                 onMarketplaceClick = { navController.navigate("marketplace") },
                 onDevicesClick = { navController.navigate("devices") },
                 onAddDeviceClick = { navController.navigate("provisioning") },
@@ -143,6 +233,18 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 cartRepository = cartRepository,
                 onBackClick = { navController.popBackStack() },
                 onCartClick = { navController.navigate("cart") }
+            )
+        }
+
+        composable(
+            route = "analytics/{deviceId}",
+            arguments = listOf(navArgument("deviceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            AnalyticsScreen(
+                deviceId = deviceId,
+                repository = firestoreRepository,
+                onBackClick = { navController.popBackStack() }
             )
         }
 

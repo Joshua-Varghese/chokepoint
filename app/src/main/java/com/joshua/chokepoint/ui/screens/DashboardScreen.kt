@@ -37,7 +37,7 @@ fun DashboardScreen(
     isConnected: Boolean,
     savedDevices: List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>,
     onLogoutClick: () -> Unit,
-    onHistoryClick: () -> Unit,
+    onHistoryClick: (String) -> Unit,
     onMarketplaceClick: () -> Unit,
     onDevicesClick: () -> Unit,
     onAddDeviceClick: () -> Unit,
@@ -56,7 +56,7 @@ fun DashboardScreen(
     
     // Pager State
     // If no devices, we simulate 1 page for the "Add Device" placeholder
-    val pageCount = if (savedDevices.isEmpty()) 1 else savedDevices.size
+    val pageCount = if (savedDevices.isEmpty()) 1 else savedDevices.size + 1
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pageCount })
 
     Scaffold(
@@ -155,20 +155,24 @@ fun DashboardScreen(
                         state = pagerState,
                         modifier = Modifier.fillMaxWidth().height(260.dp)
                     ) { page ->
-                        val device = savedDevices[page]
-                        val data = deviceReadings[device.id] ?: com.joshua.chokepoint.data.model.SensorData(deviceId = device.id, airQuality = "Waiting...")
-                        
-                        // Offline Logic
-                        val currentTime = if (ticker > 0) ticker else System.currentTimeMillis()
-                        val timeDiff = currentTime - data.timestamp
-                        val isOffline = timeDiff > 30 * 1000 // 30 seconds threshold
-                        
-                        DashboardCard(
-                            data = data,
-                            deviceName = device.name,
-                            isOffline = isOffline,
-                            ticker = ticker
-                        )
+                        if (page == 0) {
+                            RankingCard(deviceReadings, savedDevices)
+                        } else {
+                            val device = savedDevices[page - 1]
+                            val data = deviceReadings[device.id] ?: com.joshua.chokepoint.data.model.SensorData(deviceId = device.id, airQuality = "Waiting...")
+                            
+                            // Offline Logic
+                            val currentTime = if (ticker > 0) ticker else System.currentTimeMillis()
+                            val timeDiff = currentTime - data.timestamp
+                            val isOffline = timeDiff > 30 * 1000 // 30 seconds threshold
+                            
+                            DashboardCard(
+                                data = data,
+                                deviceName = device.name,
+                                isOffline = isOffline,
+                                ticker = ticker
+                            )
+                        }
                     }
                     
                     Spacer(modifier = Modifier.height(16.dp))
@@ -197,18 +201,49 @@ fun DashboardScreen(
             // Detailed Readings (For CURRENTLY SELECTED Page)
             // If empty, show zeros
             val currentData = if (savedDevices.isNotEmpty()) {
-                val currentDevice = savedDevices[pagerState.currentPage]
-                deviceReadings[currentDevice.id] ?: com.joshua.chokepoint.data.model.SensorData()
+                if (pagerState.currentPage == 0) {
+                    val validReadings = savedDevices.mapNotNull { deviceReadings[it.id] }.filter { it.gasRaw > 0 }
+                    val avgRaw = if (validReadings.isEmpty()) 0 else validReadings.map { it.gasRaw }.average().toInt()
+                    val avgCo2 = if (validReadings.isEmpty()) 0.0 else validReadings.map { it.co2 }.average()
+                    val avgSmoke = if (validReadings.isEmpty()) 0.0 else validReadings.map { it.smoke }.average()
+                    val avgQuality = when {
+                        validReadings.isEmpty() -> "Waiting..."
+                        avgSmoke > 0.5 -> "Hazardous"
+                        avgCo2 > 1000 -> "Poor"
+                        avgCo2 > 400 -> "Moderate"
+                        else -> "Excellent"
+                    }
+                    com.joshua.chokepoint.data.model.SensorData(airQuality = avgQuality, gasRaw = avgRaw, co2 = avgCo2)
+                } else {
+                    val currentDevice = savedDevices[pagerState.currentPage - 1]
+                    deviceReadings[currentDevice.id] ?: com.joshua.chokepoint.data.model.SensorData()
+                }
             } else {
                 com.joshua.chokepoint.data.model.SensorData()
             }
 
             // Detailed Readings Header
-            Text(
-                text = "Detailed Readings",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Detailed Readings",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                if (pagerState.currentPage == 0) {
+                    TextButton(onClick = { onHistoryClick("home") }) {
+                        Text("Reports", color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    val currentDevice = savedDevices[pagerState.currentPage - 1]
+                    TextButton(onClick = { onHistoryClick(currentDevice.id) }) {
+                        Text("Analytics", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -380,6 +415,66 @@ fun DetailCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.DarkGray // Fix: Better contrast
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun RankingCard(
+    deviceReadings: Map<String, com.joshua.chokepoint.data.model.SensorData>,
+    savedDevices: List<com.joshua.chokepoint.data.firestore.FirestoreRepository.Device>,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(260.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+            Text(
+                text = "LOCATION RANKING",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                letterSpacing = 2.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            val rankedDevices = savedDevices.map { device ->
+                val data = deviceReadings[device.id] ?: com.joshua.chokepoint.data.model.SensorData(deviceId=device.id)
+                Pair(device, data)
+            }.sortedByDescending { it.second.co2 }
+
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+            ) {
+                rankedDevices.forEach { (device, data) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(device.name, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(data.airQuality.ifEmpty { "Waiting..." }, color = MaterialTheme.colorScheme.onPrimary.copy(alpha=0.9f), modifier = Modifier.padding(end = 12.dp))
+                            Surface(
+                                modifier = Modifier.size(10.dp),
+                                shape = CircleShape,
+                                color = if(data.airQuality == "Hazardous" || data.airQuality == "Poor") Color.Red else Color.Green
+                            ) {}
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f))
+                }
+                if (rankedDevices.isEmpty()) {
+                    Text(
+                        text = "No devices to rank.",
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 32.dp)
+                    )
+                }
             }
         }
     }

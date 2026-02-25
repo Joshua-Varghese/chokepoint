@@ -18,7 +18,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import coil.compose.AsyncImage
+import com.joshua.chokepoint.ui.components.ProductImage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -177,26 +177,39 @@ fun ProductCard(
     ) {
         Column {
             Box(modifier = Modifier.height(140.dp)) {
-                AsyncImage(
-                    model = product.imageUrl,
+                ProductImage(
+                    imageUrl = product.imageUrl,
                     contentDescription = product.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
-                if (product.tags.isNotEmpty()) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = MaterialTheme.shapes.small,
+                if (product.badges.isNotEmpty()) {
+                    Column(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(8.dp)
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Text(
-                            text = product.tags.first().uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        product.badges.forEach { badge ->
+                            val (bgColor, textColor) = when (badge) {
+                                "New Arrival" -> Color(0xFFFEF9C3) to Color(0xFF854D0E)
+                                "Best Seller" -> Color(0xFFFCE7F3) to Color(0xFF9D174D)
+                                "Featured"    -> Color(0xFFE0F2FE) to Color(0xFF075985)
+                                "Staff Pick"  -> Color(0xFFF0FDF4) to Color(0xFF166534)
+                                else          -> Color(0xFFF1F5F9) to Color(0xFF475569)
+                            }
+                            Surface(
+                                color = bgColor,
+                                shape = MaterialTheme.shapes.small,
+                            ) {
+                                Text(
+                                    text = badge.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = textColor
+                                )
+                            }
+                        }
                     }
                 }
             }

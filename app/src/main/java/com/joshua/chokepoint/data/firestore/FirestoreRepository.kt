@@ -64,7 +64,7 @@ class FirestoreRepository {
         // For backwards compatibility during transition if needed
     }
 
-    fun claimDevice(deviceId: String, name: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+    fun claimDevice(deviceId: String, name: String, lat: Double? = null, lng: Double? = null, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
         if (userId == null) {
             onError(Exception("User not logged in"))
@@ -78,12 +78,17 @@ class FirestoreRepository {
 
         // 1. Global Registry (Create if not exists)
         val globalDeviceRef = devicesCollection.document(deviceId)
-        val globalData = hashMapOf(
+        val globalData: MutableMap<String, Any> = hashMapOf(
             "name" to name, 
             "adminId" to userId,
             "shareCode" to shareCode, // New: Save Share Code
             "registeredAt" to com.google.firebase.Timestamp.now()
         )
+        if (lat != null && lng != null) {
+            globalData["lat"] = lat
+            globalData["lng"] = lng
+        }
+
         // Use Merge so we don't wipe existing data, but we DO update the shareCode if we are claiming
         batch.set(globalDeviceRef, globalData, com.google.firebase.firestore.SetOptions.merge())
 
@@ -216,30 +221,101 @@ class FirestoreRepository {
             return@callbackFlow
         }
 
-        val listener = db.collection("devices").document(deviceId).collection("readings")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(limit.toLong())
-            .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("Firestore", "Listen failed.", e)
-                    close(e)
-                    return@addSnapshotListener
-                }
+        val listener = if (deviceId == "home") {
+            // Collection group query to get readings from all devices, assuming the subcollection is always "readings"
+            db.collectionGroup("readings")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(limit.toLong())
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.e("Firestore", "Listen failed.", e)
+                        close(e)
+                        return@addSnapshotListener
+                    }
 
-                if (snapshot != null) {
-                    val readings = snapshot.documents.mapNotNull { doc ->
+                    if (snapshot != null) {
+                        val readings = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                doc.toObject(SensorData::class.java)
+                            } catch (e: Exception) {
+                                Log.e("Firestore", "Error parsing doc ${doc.id}", e)
+                                null
+                            }
+                        }
+                        trySend(readings)
+                    }
+                }
+        } else {
+            db.collection("devices").document(deviceId).collection("readings")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(limit.toLong())
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.e("Firestore", "Listen failed.", e)
+                        close(e)
+                        return@addSnapshotListener
+                    }
+
+                    if (snapshot != null) {
+                        val readings = snapshot.documents.mapNotNull { doc ->
+                            try {
+                                doc.toObject(SensorData::class.java)
+                            } catch (e: Exception) {
+                                Log.e("Firestore", "Error parsing doc ${doc.id}", e)
+                                null
+                            }
+                        }
+                        trySend(readings)
+                    }
+                }
+        }
+
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun getHistoricalReadings(deviceId: String, limit: Int = 300): List<SensorData> {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val userId = auth.currentUser?.uid ?: return emptyList()
+
+        return try {
+            if (deviceId == "home") {
+                val devicesSnapshot = db.collection("users").document(userId).collection("devices").get().await()
+                val allReadings = mutableListOf<SensorData>()
+                for (doc in devicesSnapshot.documents) {
+                    val id = doc.id
+                    val readingsSnapshot = db.collection("devices").document(id).collection("readings")
+                        .orderBy("timestamp", Query.Direction.DESCENDING)
+                        .limit(limit.toLong())
+                        .get().await()
+                        
+                    val readings = readingsSnapshot.documents.mapNotNull { rDoc ->
                         try {
-                            doc.toObject(SensorData::class.java)
+                            rDoc.toObject(SensorData::class.java)
                         } catch (e: Exception) {
-                            Log.e("Firestore", "Error parsing doc ${doc.id}", e)
                             null
                         }
                     }
-                    trySend(readings)
+                    allReadings.addAll(readings)
+                }
+                allReadings.sortedByDescending { it.timestamp }.take(limit)
+            } else {
+                val snapshot = db.collection("devices").document(deviceId).collection("readings")
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .limit(limit.toLong())
+                    .get().await()
+                    
+                snapshot.documents.mapNotNull { doc ->
+                    try {
+                        doc.toObject(SensorData::class.java)
+                    } catch (e: Exception) {
+                        null
+                    }
                 }
             }
-
-        awaitClose { listener.remove() }
+        } catch (e: Exception) {
+            Log.e("Firestore", "Error fetching historical readings", e)
+            emptyList()
+        }
     }
 
     suspend fun getLastReading(deviceId: String): SensorData? {

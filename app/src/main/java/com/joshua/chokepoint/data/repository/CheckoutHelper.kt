@@ -81,7 +81,10 @@ class CheckoutHelper(private val activity: Activity) {
             options.put("image", "https://chokepoint.io/logo.png") // Replace with actual logo if avail
             options.put("currency", "INR")
             options.put("amount", (amount * 100).toInt()) // Amount in paise
-            options.put("prefill.email", email)
+            val prefill = JSONObject()
+            prefill.put("email", email)
+            // prefill.put("contact", "9876543210") // Optional: Pass phone if available
+            options.put("prefill", prefill)
             
             val retryObj = JSONObject()
             retryObj.put("enabled", true)

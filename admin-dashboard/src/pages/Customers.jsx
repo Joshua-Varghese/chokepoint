@@ -31,6 +31,7 @@ export default function Customers() {
                     <thead>
                         <tr>
                             <th>User ID (UID)</th>
+                            <th>Name / Email</th>
                             <th>Status</th>
                             <th>Shopping</th>
                             <th>Actions</th>
@@ -45,6 +46,10 @@ export default function Customers() {
                             customers.map(c => (
                                 <tr key={c.id}>
                                     <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{c.id}</td>
+                                    <td>
+                                        <div style={{ fontWeight: 600 }}>{c.name || 'Unknown User'}</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#71717a' }}>{c.email || 'No email'}</div>
+                                    </td>
                                     <td>
                                         <span className="badge success">Active</span>
                                     </td>
@@ -66,9 +71,8 @@ export default function Customers() {
                 </table>
             </div>
 
-            <div style={{ marginTop: '2rem', padding: '1rem', background: '#f4f4f5', borderRadius: '8px', fontSize: '0.875rem', color: '#71717a' }}>
-                <strong>Note:</strong> Currently listing users who have triggered Firestore writes (e.g. added items to Cart).
-                Full user profiles (Email, Name) require Firestore syncing on Sign Up.
+            <div style={{ marginTop: '2rem', padding: '1rem', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.875rem', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                <strong>Note:</strong> User profiles are updated via the Android app on Sign Up / Sign In.
             </div>
         </div>
     );

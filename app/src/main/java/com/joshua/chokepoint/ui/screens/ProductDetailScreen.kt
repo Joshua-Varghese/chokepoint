@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import com.joshua.chokepoint.ui.components.ProductImage
 import com.joshua.chokepoint.data.model.Product
 import com.joshua.chokepoint.data.repository.CartRepository
 import com.joshua.chokepoint.data.repository.CheckoutHelper
@@ -166,8 +166,8 @@ fun ProductDetailScreen(
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    AsyncImage(
-                        model = product.imageUrl,
+                    ProductImage(
+                        imageUrl = product.imageUrl,
                         contentDescription = product.name,
                         modifier = Modifier
                             .fillMaxWidth()
