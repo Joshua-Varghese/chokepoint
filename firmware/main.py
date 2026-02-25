@@ -54,14 +54,15 @@ def check_for_updates():
             if remote_sha and remote_sha != local_sha:
                 print("New firmware commit detected:", remote_sha)
                 
-                # Fetch private raw file using PAT
+                # Fetch private raw file using PAT directly from the API endpoint
                 headers_raw = {
                     "User-Agent": "ESP32-Chokepoint",
-                    "Authorization": f"Bearer {config.GITHUB_PAT}"
+                    "Authorization": f"Bearer {config.GITHUB_PAT}",
+                    "Accept": "application/vnd.github.v3.raw"
                 }
                 
                 updater = ota.OTAUpdater()
-                success = updater.simple_update(download_url, headers=headers_raw)
+                success = updater.simple_update(url, headers=headers_raw)
                 
                 if success:
                     with open("version_sha.txt", "w") as f:
@@ -139,7 +140,7 @@ def main():
         wm.run_provisioning_server()
         return 
 
-    check_for_updates()
+
 
     # 3. Initialize Discovery
     try:
