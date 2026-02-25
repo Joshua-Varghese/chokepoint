@@ -3,6 +3,8 @@ import { collection, onSnapshot, query, orderBy, doc, updateDoc, arrayUnion } fr
 import { db } from '../firebase-config';
 import { Package, ChevronDown, ChevronUp, Search, Filter, Printer, MessageSquare, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Orders() {
     const [orders, setOrders] = useState([]);
@@ -80,7 +82,92 @@ export default function Orders() {
     };
 
     const handlePrintInvoice = (orderId) => {
-        window.print();
+        const order = orders.find(o => o.id === orderId);
+        if (!order) {
+            toast.error("Order not found for printing.");
+            return;
+        }
+
+        const doc = new jsPDF();
+
+        // Header
+        doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
+        doc.text('CHOKEPOINT', 14, 22);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100);
+        doc.text('Official Order Invoice', 14, 30);
+
+        // Order Meta
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Order ID: #${order.id}`, 14, 45);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        const dateStr = order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : 'N/A';
+        doc.text(`Date: ${dateStr}`, 14, 52);
+        doc.text(`Status: ${order.status.toUpperCase()}`, 14, 59);
+
+        // Customer Details (Right Aligned)
+        const pageWidth = doc.internal.pageSize.width;
+        doc.setFont("helvetica", "bold");
+        doc.text('Billed To:', pageWidth - 14, 45, { align: 'right' });
+        doc.setFont("helvetica", "normal");
+        doc.text(`${order.customer?.firstName} ${order.customer?.lastName}`, pageWidth - 14, 52, { align: 'right' });
+        doc.text(`${order.customer?.email}`, pageWidth - 14, 59, { align: 'right' });
+        doc.text(`${order.customer?.phone || ''}`, pageWidth - 14, 66, { align: 'right' });
+        doc.text(`${order.customer?.address}`, pageWidth - 14, 73, { align: 'right' });
+        doc.text(`${order.customer?.city}, ${order.customer?.state} ${order.customer?.zip}`, pageWidth - 14, 80, { align: 'right' });
+
+        // Items Table
+        const tableColumn = ["Item Description", "Variant", "Quantity", "Unit Price", "Total"];
+        const tableRows = [];
+
+        if (order.items && order.items.length > 0) {
+            order.items.forEach(item => {
+                const itemData = [
+                    item.baseProduct?.name || 'Unknown Product',
+                    item.variant?.name || 'Default',
+                    item.quantity || 1,
+                    `Rs. ${item.totalPrice?.toLocaleString() || 0}`,
+                    `Rs. ${(item.totalPrice * (item.quantity || 1))?.toLocaleString() || 0}`
+                ];
+                tableRows.push(itemData);
+            });
+        }
+
+        autoTable(doc, {
+            startY: 95,
+            head: [tableColumn],
+            body: tableRows,
+            theme: 'grid',
+            headStyles: { fillColor: [24, 24, 27], textColor: 255 }, // Zinc 900
+            styles: { fontSize: 10, cellPadding: 5 },
+            columnStyles: {
+                0: { cellWidth: 70 },
+                2: { halign: 'center' },
+                3: { halign: 'right' },
+                4: { halign: 'right' }
+            }
+        });
+
+        // Totals
+        const finalY = doc.lastAutoTable?.finalY || 150;
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Grand Total: Rs. ${order.total?.toLocaleString()}`, pageWidth - 14, finalY + 15, { align: 'right' });
+
+        // Footer
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(150);
+        doc.text('Thank you for shopping with Chokepoint!', 14, doc.internal.pageSize.height - 20);
+
+        doc.save(`chokepoint-invoice-${order.id}.pdf`);
     };
 
     const confirmStatusUpdate = (orderId, newStatus) => {
