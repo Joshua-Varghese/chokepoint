@@ -3,7 +3,6 @@ import { collection, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore
 import { db } from '../firebase-config';
 import { useNavigate } from 'react-router-dom';
 import { Terminal, Search, Wifi, WifiOff, Activity, ChevronDown, ChevronUp } from 'lucide-react';
-import mqtt from 'mqtt';
 
 export default function Devices() {
     const [devices, setDevices] = useState([]);
@@ -43,43 +42,6 @@ export default function Devices() {
                 }));
 
                 setDevices(enrichedDevices);
-
-                // --- NATIVE MQTT WEBSOCKET CONNECTION ---
-                const client = mqtt.connect(import.meta.env.VITE_MQTT_BROKER_URL, {
-                    username: import.meta.env.VITE_MQTT_USERNAME,
-                    password: import.meta.env.VITE_MQTT_PASSWORD
-                });
-
-                client.on('connect', () => {
-                    console.log("[Dashboard] MQTT Connected natively");
-                    client.subscribe('chokepoint/devices/+/data', (err) => {
-                        if (!err) console.log("[Dashboard] Subscribed to all device telemetry streams");
-                    });
-                });
-
-                client.on('message', (topic, message) => {
-                    try {
-                        const payload = JSON.parse(message.toString());
-                        const deviceId = payload.device_id;
-                        if (deviceId) {
-                            // Update local table state instantly when a ping arrives
-                            setDevices(prevDevices =>
-                                prevDevices.map(d =>
-                                    d.id === deviceId
-                                        ? { ...d, lastSeen: { seconds: Math.floor(Date.now() / 1000) } }
-                                        : d
-                                )
-                            );
-                        }
-                    } catch (e) {
-                        console.error("[Dashboard] MQTT Parse Error", e);
-                    }
-                });
-
-                return () => {
-                    client.end();
-                };
-
             } catch (error) {
                 console.error("Error fetching data:", error);
             } finally {
