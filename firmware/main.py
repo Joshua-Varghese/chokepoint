@@ -7,13 +7,10 @@ from wifi_manager import WifiManager
 from umqtt.simple import MQTTClient
 import urequests
 import ota
-try:
-    import mq135
-except ImportError:
-    mq135 = None
-
+import ota
 from discovery import Discovery
 import file_mgr
+import mq135_math
 print("Testing")
 # --- Global State ---
 device_id = ubinascii.hexlify(machine.unique_id()).decode()
@@ -82,14 +79,9 @@ def check_for_updates():
     except Exception as e:
         print("Update check failed:", e)
 
-# --- Sensor Mock if mq135 missing ---
-if mq135:
-    mq = mq135.MQ135(34) # Pin 34
-else:
-    class MockSensor:
-        def get_readings(self):
-            return {"co2": 400.0, "nh3": 0.05, "smoke": 10.0}
-    mq = MockSensor()
+# --- Real MQ135 Analog Sensor Init ---
+mq = machine.ADC(machine.Pin(34))
+mq.atten(machine.ADC.ATTN_11DB) # Read full 3.3V range
 
 def mqtt_callback(topic, msg):
     print("MSG:", topic, msg)
@@ -168,6 +160,15 @@ def main():
         cmd_topic = f"chokepoint/devices/{device_id}/cmd"
         mqtt.subscribe(cmd_topic)
         
+        # Load R0 Calibration if it exists
+        r0_val = 76.63 # Default
+        try:
+            with open("r0_value.txt", "r") as f:
+                r0_val = float(f.read().strip())
+            print("Loaded R0:", r0_val)
+        except:
+            print("Using default R0")
+
         # Main Loop
         last_sensor_read = 0
         while True:
@@ -182,10 +183,20 @@ def main():
                 if now - last_sensor_read >= 2:
                     last_sensor_read = now
                     
-                    # Read Sensor
-                    data = mq.get_readings()
-                    data['device_id'] = device_id
-                    data['timestamp'] = int(now)
+                    # Read Real Sensor
+                    raw_gas = mq.read()
+                    local_ip = wm.wlan.ifconfig()[0] if wm.wlan.isconnected() else "Unknown"
+                    co2_ppm = mq135_math.get_ppm(raw_gas, r0_val)
+
+                    data = {
+                        "device_id": device_id,
+                        "timestamp": int(now),
+                        "gas_raw": raw_gas,
+                        "co2": co2_ppm,
+                        "smoke": 0.0,
+                        "nh3": 0.0,
+                        "local_ip": local_ip
+                    }
                     
                     # Publish
                     payload = json.dumps(data)

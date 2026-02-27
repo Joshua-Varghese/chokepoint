@@ -84,11 +84,23 @@ client.on('message', async (topic, message) => {
 
         console.log(`[${new Date().toLocaleTimeString()}] Ping caught from device: ${deviceId}`);
 
-        // 1. Update the 'lastSeen' heartbeat on the main device document
+        // 1. Update the 'lastSeen' heartbeat & metadata on the main device document
         const deviceRef = db.collection('devices').doc(deviceId);
-        await deviceRef.set({
+        const docSnap = await deviceRef.get();
+
+        let updateData = {
             lastSeen: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        };
+
+        if (payload.local_ip) {
+            updateData.lastIp = payload.local_ip;
+        }
+
+        if (!docSnap.exists || !docSnap.data().provisionedAt) {
+            updateData.provisionedAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+
+        await deviceRef.set(updateData, { merge: true });
 
         // 2. Save the reading to the subcollection so the Dashboard has historical data
         const readingData = {
