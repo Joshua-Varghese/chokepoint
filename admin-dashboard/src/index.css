@@ -129,6 +129,50 @@ tr:last-child td {
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
+  transition: width 0.3s ease, padding 0.3s ease;
+  position: relative;
+}
+
+.sidebar.collapsed {
+  width: 80px;
+  padding: 1.5rem 0.75rem;
+}
+
+.nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  display: inline-block;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar.collapsed .nav-label {
+  opacity: 0;
+  width: 0;
+  display: none;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 1.5rem;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  color: var(--text-muted);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.sidebar-toggle:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
 }
 
 .main {
