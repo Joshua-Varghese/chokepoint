@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { useEffect, useState, Fragment } from 'react';
+import { collection, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { useNavigate } from 'react-router-dom';
-import { Upload } from 'lucide-react';
+import { Terminal, Search, Wifi, WifiOff, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import mqtt from 'mqtt';
 
 export default function Devices() {
     const [devices, setDevices] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [firmware, setFirmware] = useState({ version: '', url: '' });
-    const [savingFirmware, setSavingFirmware] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [expandedDevice, setExpandedDevice] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -42,6 +43,43 @@ export default function Devices() {
                 }));
 
                 setDevices(enrichedDevices);
+
+                // --- NATIVE MQTT WEBSOCKET CONNECTION ---
+                const client = mqtt.connect(import.meta.env.VITE_MQTT_BROKER_URL, {
+                    username: import.meta.env.VITE_MQTT_USERNAME,
+                    password: import.meta.env.VITE_MQTT_PASSWORD
+                });
+
+                client.on('connect', () => {
+                    console.log("[Dashboard] MQTT Connected natively");
+                    client.subscribe('chokepoint/devices/+/data', (err) => {
+                        if (!err) console.log("[Dashboard] Subscribed to all device telemetry streams");
+                    });
+                });
+
+                client.on('message', (topic, message) => {
+                    try {
+                        const payload = JSON.parse(message.toString());
+                        const deviceId = payload.device_id;
+                        if (deviceId) {
+                            // Update local table state instantly when a ping arrives
+                            setDevices(prevDevices =>
+                                prevDevices.map(d =>
+                                    d.id === deviceId
+                                        ? { ...d, lastSeen: { seconds: Math.floor(Date.now() / 1000) } }
+                                        : d
+                                )
+                            );
+                        }
+                    } catch (e) {
+                        console.error("[Dashboard] MQTT Parse Error", e);
+                    }
+                });
+
+                return () => {
+                    client.end();
+                };
+
             } catch (error) {
                 console.error("Error fetching data:", error);
             } finally {
@@ -49,111 +87,164 @@ export default function Devices() {
             }
         };
         fetchDevicesAndUsers();
-
-        // Listen to current firmware
-        const unsub = onSnapshot(doc(db, 'system_config', 'firmware'), (docSnap) => {
-            if (docSnap.exists()) {
-                setFirmware(docSnap.data());
-            }
-        });
-
-        return () => unsub();
     }, []);
 
-    const handlePushFirmware = async () => {
-        if (!firmware.version || !firmware.url) return alert('Enter version and URL');
-        setSavingFirmware(true);
-        try {
-            await setDoc(doc(db, 'system_config', 'firmware'), {
-                version: firmware.version,
-                url: firmware.url,
-                updatedAt: new Date()
-            });
-            alert('Firmware update pushed to devices!');
-        } catch (e) {
-            console.error(e);
-            alert('Failed to push firmware');
-        } finally {
-            setSavingFirmware(false);
-        }
+    // Calculate if device is online (seen in last 5 minutes)
+    const isOnline = (lastSeen) => {
+        if (!lastSeen) return false;
+        const seenDate = new Date(lastSeen.seconds * 1000);
+        const now = new Date();
+        const diffMinutes = (now - seenDate) / 1000 / 60;
+        return diffMinutes < 5;
     };
 
+    const filteredDevices = devices.filter(d => {
+        const term = (searchTerm || '').toLowerCase();
+        return (d.id && d.id.toLowerCase().includes(term)) ||
+            (d.name && d.name.toLowerCase().includes(term)) ||
+            (d.ownerName && typeof d.ownerName === 'string' && d.ownerName.toLowerCase().includes(term));
+    });
+
     return (
-        <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
                 <h1 style={{ fontSize: '1.5rem', fontWeight: '700' }}>Device Management</h1>
+
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
+                    <div style={{ position: 'relative', width: '260px' }}>
+                        <Search style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={16} />
+                        <input
+                            type="text"
+                            placeholder="Search by ID, Name, or Username..."
+                            className="input"
+                            style={{ paddingLeft: '2.5rem', height: '100%', width: '100%' }}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                </div>
             </div>
 
-            <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-                <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Upload size={20} /> OTA Firmware Update
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '1rem', alignItems: 'end' }}>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Target Version</label>
-                        <input
-                            type="text"
-                            className="input"
-                            placeholder="e.g., 1.0.2"
-                            value={firmware.version}
-                            onChange={(e) => setFirmware({ ...firmware, version: e.target.value })}
-                        />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Firmware File URL (.py or .bin)</label>
-                        <input
-                            type="text"
-                            className="input"
-                            placeholder="https://raw.githubusercontent.com/..."
-                            value={firmware.url}
-                            onChange={(e) => setFirmware({ ...firmware, url: e.target.value })}
-                        />
-                    </div>
-                    <button
-                        className="btn btn-primary"
-                        onClick={handlePushFirmware}
-                        disabled={savingFirmware}
-                    >
-                        {savingFirmware ? 'Pushing...' : 'Push Update'}
-                    </button>
-                </div>
-                <p style={{ fontSize: '0.85rem', color: '#71717a', marginTop: '1rem' }}>
-                    Devices will automatically download and apply this firmware upon their next boot or polling cycle. Ensure the URL points directly to the RAW file content.
-                </p>
-            </div>
-            <div className="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Device ID</th>
-                            <th>Name</th>
-                            <th>Owner</th>
-                            <th>Last Seen</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr><td colSpan="5">Loading...</td></tr>
-                        ) : devices.map(d => (
-                            <tr key={d.id}>
-                                <td>{d.id}</td>
-                                <td>{d.name || 'Unknown'}</td>
-                                <td>{d.ownerName}</td>
-                                <td>{d.lastSeen ? new Date(d.lastSeen.seconds * 1000).toLocaleString() : 'Never'}</td>
-                                <td>
-                                    <button
-                                        className="btn btn-primary"
-                                        style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', background: '#000' }}
-                                        onClick={() => navigate(`/devices/${d.id}`)}
-                                    >
-                                        Manage
-                                    </button>
-                                </td>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+                            <tr>
+                                <th style={{ padding: '1rem' }}>Device ID</th>
+                                <th style={{ padding: '1rem' }}>Device Name</th>
+                                <th style={{ padding: '1rem' }}>Assigned Owner</th>
+                                <th style={{ padding: '1rem' }}>Status</th>
+                                <th style={{ padding: '1rem' }}>Last Ping</th>
+                                <th style={{ padding: '1rem', textAlign: 'right' }}>More</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody style={{ divideY: '1px solid #f3f4f6' }}>
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="6" style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                                        Discovering network devices...
+                                    </td>
+                                </tr>
+                            ) : filteredDevices.length === 0 ? (
+                                <tr>
+                                    <td colSpan="6" style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                                        No devices found matching your search.
+                                    </td>
+                                </tr>
+                            ) : filteredDevices.map(d => {
+                                const online = isOnline(d.lastSeen);
+                                return (
+                                    <Fragment key={d.id}>
+                                        <tr style={{ transition: 'background-color 0.2s', borderBottom: '1px solid #f3f4f6' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f9fafb'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            <td style={{ padding: '1rem', fontFamily: 'monospace', fontSize: '0.75rem', color: '#4b5563' }}>
+                                                {d.id}
+                                            </td>
+                                            <td style={{ padding: '1rem', fontWeight: '500', color: '#111827' }}>
+                                                {d.name || 'Unnamed Sentinel'}
+                                            </td>
+                                            <td style={{ padding: '1rem', color: '#4b5563' }}>
+                                                {d.ownerName}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <div style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+                                                    padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '600',
+                                                    backgroundColor: online ? '#dcfce7' : '#f3f4f6',
+                                                    color: online ? '#166534' : '#6b7280',
+                                                    border: `1px solid ${online ? '#bbf7d0' : '#e5e7eb'}`
+                                                }}>
+                                                    {online ? <Wifi size={12} /> : <WifiOff size={12} />}
+                                                    {online ? 'Online' : 'Offline'}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '1rem', color: '#6b7280', fontSize: '0.8rem' }}>
+                                                {d.lastSeen ? new Date(d.lastSeen.seconds * 1000).toLocaleString() : 'Never'}
+                                            </td>
+                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                <button
+                                                    onClick={() => setExpandedDevice(expandedDevice === d.id ? null : d.id)}
+                                                    className="btn btn-ghost"
+                                                    style={{ padding: '0.35rem 0.5rem', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#f9fafb', cursor: 'pointer' }}
+                                                >
+                                                    {expandedDevice === d.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                                </button>
+                                            </td>
+                                        </tr>
+
+                                        {expandedDevice === d.id && (
+                                            <tr style={{ background: '#fafafa', borderBottom: '1px solid #e5e7eb' }}>
+                                                <td colSpan="6" style={{ padding: 0 }}>
+                                                    <div style={{ padding: '1.5rem', display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+
+                                                        {/* Metadata Card */}
+                                                        <div style={{ flex: 1, backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '1rem' }}>
+                                                            <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <Activity size={16} /> Diagnostic Overview
+                                                            </h4>
+                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8rem' }}>
+                                                                <div>
+                                                                    <div style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Network Binding</div>
+                                                                    <div style={{ color: '#111827', fontWeight: '500' }}>{d.lastIp || 'DHCP Unresolved'}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Firmware Config</div>
+                                                                    <div style={{ color: '#111827', fontWeight: '500' }}>OTA Enabled</div>
+                                                                </div>
+                                                                <div>
+                                                                    <div style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Provisioned Date</div>
+                                                                    <div style={{ color: '#111827', fontWeight: '500' }}>
+                                                                        {d.provisionedAt ? new Date(d.provisionedAt.seconds * 1000).toLocaleDateString() : 'Legacy Device'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Action Card */}
+                                                        <div style={{ flex: 1, backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                                                            <div style={{ marginBottom: '1rem', color: '#6b7280', fontSize: '0.875rem' }}>
+                                                                Access direct MQTT WebSockets terminal routing and file manipulation matrix for this specific module.
+                                                            </div>
+                                                            <button
+                                                                onClick={() => navigate(`/devices/${d.id}`)}
+                                                                style={{ backgroundColor: '#111827', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '6px', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'background-color 0.2s' }}
+                                                                onMouseOver={e => e.currentTarget.style.backgroundColor = '#374151'}
+                                                                onMouseOut={e => e.currentTarget.style.backgroundColor = '#111827'}
+                                                            >
+                                                                <Terminal size={16} /> Open Device Terminal & Logs
+                                                            </button>
+                                                        </div>
+
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

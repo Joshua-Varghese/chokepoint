@@ -345,15 +345,25 @@ class FirestoreRepository {
             return
         }
 
-        db.collection("devices")
-            .document(data.deviceId)
-            .collection("readings")
+        val deviceRef = db.collection("devices").document(data.deviceId)
+
+        // 1. Save the reading to subcollection
+        deviceRef.collection("readings")
             .add(data)
             .addOnSuccessListener {
                 Log.d("Firestore", "Reading saved to devices/${data.deviceId}/readings/${it.id}")
             }
             .addOnFailureListener { e ->
                 Log.w("Firestore", "Error adding document", e)
+            }
+
+        // 2. Update the parent device's lastSeen timestamp so Admin Dashboard registers it as Online
+        val heartbeatData = hashMapOf<String, Any>(
+            "lastSeen" to com.google.firebase.Timestamp.now()
+        )
+        deviceRef.set(heartbeatData, com.google.firebase.firestore.SetOptions.merge())
+            .addOnFailureListener { e ->
+                Log.w("Firestore", "Error updating device heartbeat", e)
             }
     }
 
