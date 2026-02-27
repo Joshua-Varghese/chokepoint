@@ -51,13 +51,13 @@ export default function Devices() {
         fetchDevicesAndUsers();
     }, []);
 
-    // Calculate if device is online (seen in last 5 minutes)
+    // Calculate if device is online (seen in last 30 seconds)
     const isOnline = (lastSeen) => {
         if (!lastSeen) return false;
         const seenDate = new Date(lastSeen.seconds * 1000);
         const now = new Date();
-        const diffMinutes = (now - seenDate) / 1000 / 60;
-        return diffMinutes < 5;
+        const diffSeconds = (now - seenDate) / 1000;
+        return diffSeconds < 30;
     };
 
     const filteredDevices = devices.filter(d => {

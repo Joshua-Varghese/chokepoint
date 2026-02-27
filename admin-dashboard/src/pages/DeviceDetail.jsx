@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { ArrowLeft, Activity, Terminal, FileCode, RefreshCw, Save, Trash } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -20,16 +20,22 @@ export default function DeviceDetail() {
     // WebSocket Client State
     const [wsClient, setWsClient] = useState(null);
 
+    // Timer state for reactive offline checking
+    const [currentTime, setCurrentTime] = useState(Date.now());
+
     useEffect(() => {
-        // Fetch Device Metadata
-        const fetchDevice = async () => {
-            const docRef = doc(db, 'devices', id);
-            const docSnap = await getDoc(docRef);
+        const timer = setInterval(() => setCurrentTime(Date.now()), 10000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        // Fetch Device Metadata Live
+        const docRef = doc(db, 'devices', id);
+        const unsubscribeDb = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
                 setDevice({ id: docSnap.id, ...docSnap.data() });
             }
-        };
-        fetchDevice();
+        });
 
         // Connect to Local Node.js WebSocket Proxy
         const ws = new WebSocket('ws://localhost:8080');
@@ -63,6 +69,7 @@ export default function DeviceDetail() {
 
         return () => {
             if (ws) ws.close();
+            unsubscribeDb();
         };
     }, [id]);
 
@@ -102,12 +109,12 @@ export default function DeviceDetail() {
 
     if (!device) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
-    // Calculate actual device status based on last heartbeat (5 minute threshold)
+    // Calculate actual device status based on last heartbeat (30-second threshold)
     const isOnline = () => {
         if (!device?.lastSeen) return false;
         const lastPingSeconds = device.lastSeen.seconds || device.lastSeen._seconds;
         if (!lastPingSeconds) return false;
-        return (Date.now() / 1000) - lastPingSeconds < 300;
+        return (currentTime / 1000) - lastPingSeconds < 30;
     };
 
     const deviceStatus = isOnline() ? 'connected' : 'offline';
