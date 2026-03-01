@@ -106,6 +106,7 @@ export default function DeviceDetail() {
         sendCmd({ cmd: 'write', path: editingFile, content: editorContent });
     };
     const restartDevice = () => sendCmd({ cmd: 'restart' });
+    const recalibrateDevice = () => sendCmd({ cmd: 'recalibrate' });
 
     if (!device) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
@@ -137,9 +138,22 @@ export default function DeviceDetail() {
                     <div className="badge" style={{ background: deviceStatus === 'connected' ? '#dcfce7' : '#fee2e2', color: deviceStatus === 'connected' ? '#166534' : '#991b1b', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '0.875rem', fontWeight: '500' }}>
                         MQTT: {deviceStatus}
                     </div>
+                    <button onClick={recalibrateDevice} className="btn btn-outline" style={{ fontSize: '0.8rem' }} disabled={deviceStatus !== 'connected'}>Recalibrate</button>
                     <button onClick={restartDevice} className="btn btn-outline" style={{ fontSize: '0.8rem' }} disabled={deviceStatus !== 'connected'}>Reboot Device</button>
                 </div>
             </div>
+
+            {device.sensorError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #f87171', color: '#b91c1c', padding: '1rem', borderRadius: '0.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <strong style={{ display: 'block', marginBottom: '0.25rem' }}>Hardware Sensor Fault Detected</strong>
+                        <span style={{ fontSize: '0.875rem' }}>{device.sensorError}</span>
+                    </div>
+                    <button onClick={recalibrateDevice} className="btn btn-primary" style={{ background: '#b91c1c', border: 'none', fontSize: '0.875rem' }} disabled={deviceStatus !== 'connected'}>
+                        Force Recalibration
+                    </button>
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
                 {/* Left Column: List */}

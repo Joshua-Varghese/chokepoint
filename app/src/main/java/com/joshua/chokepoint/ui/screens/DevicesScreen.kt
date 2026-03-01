@@ -117,9 +117,16 @@ fun DevicesScreen(
                     OutlinedButton(
                         onClick = {
                             selectedDevice?.let { device ->
-                                viewModel.deleteDeviceFully(device.id) // Updated method name
-                                android.widget.Toast.makeText(context, "Reset Command Sent", android.widget.Toast.LENGTH_SHORT).show()
-                                showEditDialog = false
+                                viewModel.deleteDeviceFully(
+                                    deviceId = device.id,
+                                    onSuccess = {
+                                        android.widget.Toast.makeText(context, "Reset Command Sent", android.widget.Toast.LENGTH_SHORT).show()
+                                        showEditDialog = false
+                                    },
+                                    onError = { errorMsg ->
+                                        android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                )
                             }
                         },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
@@ -394,10 +401,18 @@ fun DevicesScreen(
                 Button(
                     onClick = {
                         deviceToDelete?.let { device ->
-                            viewModel.deleteDeviceFully(device.id)
-                            android.widget.Toast.makeText(context, "Device Reset & Removed", android.widget.Toast.LENGTH_SHORT).show()
+                            viewModel.deleteDeviceFully(
+                                deviceId = device.id,
+                                onSuccess = {
+                                    android.widget.Toast.makeText(context, "Device Reset & Removed", android.widget.Toast.LENGTH_SHORT).show()
+                                    deviceToDelete = null
+                                },
+                                onError = { errorMsg ->
+                                    android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_LONG).show()
+                                    deviceToDelete = null
+                                }
+                            )
                         }
-                        deviceToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete & Reset") }

@@ -1,6 +1,7 @@
 const admin = require('firebase-admin');
 const mqtt = require('mqtt');
 const WebSocket = require('ws');
+require('dotenv').config();
 const serviceAccount = require('./service-account.json');
 
 // Initialize Firebase Admin
@@ -11,10 +12,15 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-// MQTT Credentials
-const MQTT_URL = 'mqtt://puffin.rmq2.cloudamqp.com:1883'; // Use standard TCP MQTT instead of WebSockets
-const MQTT_USERNAME = 'lztdkevt:lztdkevt';
-const MQTT_PASSWORD = 'vG7j8gUsE9yG5Li7Mb8qaAcpExZLgdUS';
+// MQTT Credentials (Securely loaded from .env)
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://puffin.rmq2.cloudamqp.com:1883';
+const MQTT_USERNAME = process.env.MQTT_USERNAME;
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD;
+
+if (!MQTT_USERNAME || !MQTT_PASSWORD) {
+    console.error("CRITICAL: MQTT credentials not found in .env file! Exiting...");
+    process.exit(1);
+}
 
 console.log("Starting MQTT-to-Firestore Bridge Node.js Service...");
 
@@ -84,19 +90,42 @@ client.on('message', async (topic, message) => {
 
         console.log(`[${new Date().toLocaleTimeString()}] Ping caught from device: ${deviceId}`);
 
-        // 1. Update the 'lastSeen' heartbeat on the main device document
+        // 1. Update the 'lastSeen' heartbeat & metadata on the main device document
         const deviceRef = db.collection('devices').doc(deviceId);
-        await deviceRef.set({
+        const docSnap = await deviceRef.get();
+
+        let updateData = {
             lastSeen: admin.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
+        };
+
+        if (payload.local_ip) {
+            updateData.lastIp = payload.local_ip;
+        }
+
+        if (payload.error) {
+            updateData.sensorError = payload.error;
+        } else {
+            updateData.sensorError = admin.firestore.FieldValue.delete();
+        }
+
+        if (!docSnap.exists || !docSnap.data().provisionedAt) {
+            updateData.provisionedAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+
+        await deviceRef.set(updateData, { merge: true });
 
         // 2. Save the reading to the subcollection so the Dashboard has historical data
+        // MicroPython uses Jan 1 2000 as epoch, Unix uses Jan 1 1970. 
+        // Offset is exactly 946,684,800 seconds.
+        const MP_EPOCH_OFFSET = 946684800;
+        const unixTimestamp = (payload.timestamp || 0) + MP_EPOCH_OFFSET;
+
         const readingData = {
             co2: payload.co2 || 0,
             nh3: payload.nh3 || 0,
             smoke: payload.smoke || 0,
             gasRaw: payload.gas_raw || Math.floor(payload.co2 || 0),
-            timestamp: payload.timestamp || Math.floor(Date.now() / 1000),
+            timestamp: admin.firestore.Timestamp.fromMillis(unixTimestamp * 1000),
             deviceId: deviceId,
             airQuality: (payload.smoke > 0.5) ? "Hazardous" : ((payload.co2 > 1000) ? "Poor" : "Good")
         };
