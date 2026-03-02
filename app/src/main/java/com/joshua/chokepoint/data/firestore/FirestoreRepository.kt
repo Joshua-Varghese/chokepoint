@@ -273,7 +273,7 @@ class FirestoreRepository {
         awaitClose { listener.remove() }
     }
 
-    suspend fun getHistoricalReadings(deviceId: String, limit: Int = 300): List<SensorData> {
+    suspend fun getHistoricalReadings(deviceId: String, limit: Int = 2000): List<SensorData> {
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
         val userId = auth.currentUser?.uid ?: return emptyList()
 
