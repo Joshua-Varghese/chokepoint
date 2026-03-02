@@ -83,6 +83,9 @@ def check_for_updates():
 # --- Real MQ135 Analog Sensor Init ---
 mq = machine.ADC(machine.Pin(34))
 mq.atten(machine.ADC.ATTN_11DB) # Read full 3.3V range
+# --- Real MQ135 Analog Sensor Init ---
+mq = machine.ADC(machine.Pin(34))
+mq.atten(machine.ADC.ATTN_11DB) # Read full 3.3V range
 
 def mqtt_callback(topic, msg):
     print("MSG:", topic, msg)
@@ -166,6 +169,16 @@ def main():
         # Subscribe
         cmd_topic = f"chokepoint/devices/{device_id}/cmd"
         mqtt.subscribe(cmd_topic)
+        
+        # Load R0 Calibration if it exists
+        r0_val = 76.63 # Default
+        try:
+            with open("r0_value.txt", "r") as f:
+                r0_val = float(f.read().strip())
+            print("Loaded R0:", r0_val)
+        except:
+            print("Using default R0")
+
         
         # Load R0 Calibration if it exists
         r0_val = 76.63 # Default
