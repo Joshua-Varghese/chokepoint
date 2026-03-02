@@ -28,12 +28,12 @@ import androidx.compose.foundation.verticalScroll
 import java.util.concurrent.TimeUnit
 
 enum class TimeFilter(val label: String, val durationMillis: Long) {
+    ALL("All Time", Long.MAX_VALUE),
     MINS_5("5 Mins", TimeUnit.MINUTES.toMillis(5)),
     MINS_10("10 Mins", TimeUnit.MINUTES.toMillis(10)),
     MINS_30("30 Mins", TimeUnit.MINUTES.toMillis(30)),
     HOUR_1("1 Hour", TimeUnit.HOURS.toMillis(1)),
-    HOURS_24("24 Hours", TimeUnit.HOURS.toMillis(24)),
-    ALL("All Time", Long.MAX_VALUE)
+    HOURS_24("24 Hours", TimeUnit.HOURS.toMillis(24))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,7 +44,7 @@ fun AnalyticsScreen(
     onBackClick: () -> Unit
 ) {
     val readings = remember { mutableStateListOf<SensorData>() }
-    var selectedFilter by remember { mutableStateOf(TimeFilter.HOUR_1) }
+    var selectedFilter by remember { mutableStateOf(TimeFilter.ALL) }
     var isLoading by remember { mutableStateOf(true) }
     
     LaunchedEffect(deviceId) {
@@ -269,13 +269,23 @@ fun HistoryCard(data: SensorData) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val statusColor = if (data.airQuality == "Hazardous" || data.airQuality == "Poor") androidx.compose.ui.graphics.Color.Red else androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                    Surface(
+                        modifier = Modifier.size(10.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = statusColor
+                    ) {}
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = java.text.SimpleDateFormat("MMM dd, HH:mm:ss", java.util.Locale.getDefault()).format(data.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextDark.copy(alpha = 0.7f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = java.text.SimpleDateFormat("MMM dd, HH:mm:ss", java.util.Locale.getDefault()).format(data.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextDark.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = "CO2: ${data.co2.toInt()} ppm",
+                    text = "CO₂: ${data.co2.toInt()} ppm",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = TextDark
