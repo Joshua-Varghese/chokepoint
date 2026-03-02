@@ -1,10 +1,110 @@
 import React, { useState, useEffect, Fragment } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, arrayUnion, addDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import { Package, ChevronDown, ChevronUp, Search, Filter, Printer, MessageSquare, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+const STATUS_OPTIONS = [
+    { value: 'pending_payment', label: 'Pending Payment' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'processing', label: 'Processing' },
+    { value: 'shipped', label: 'Shipped' },
+    { value: 'delivered', label: 'Delivered' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'refunded', label: 'Refunded' }
+];
+
+const FILTER_OPTIONS = [
+    { value: 'all', label: 'All Statuses' },
+    ...STATUS_OPTIONS
+];
+
+const CustomDropdown = ({ value, onChange, options, buttonStyle = {}, dropdownAlign = "left", isStatusPill = false, getStatusColor }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    // Filter pill style based on active value
+    const pillStyle = isStatusPill && getStatusColor ? getStatusColor(value) : {};
+
+    return (
+        <div style={{ position: 'relative', display: 'inline-block', textAlign: 'left', zIndex: isOpen ? 50 : 1 }} onMouseLeave={() => setIsOpen(false)}>
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem',
+                    fontSize: isStatusPill ? '0.75rem' : '0.875rem',
+                    fontWeight: isStatusPill ? 600 : 500,
+                    cursor: 'pointer',
+                    borderRadius: isStatusPill ? '9999px' : '6px',
+                    padding: isStatusPill ? '0.35rem 0.75rem' : '0.5rem 1rem',
+                    border: isStatusPill ? `1px solid ${pillStyle.borderColor || 'var(--border)'}` : '1px solid var(--border)',
+                    background: isStatusPill ? pillStyle.backgroundColor : '#fff',
+                    color: isStatusPill ? pillStyle.color : 'var(--text-main)',
+                    width: isStatusPill ? '145px' : 'auto',
+                    minWidth: isStatusPill ? 'auto' : '160px',
+                    transition: 'all 0.2s',
+                    ...buttonStyle
+                }}
+            >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {options.find(o => o.value === value)?.label || 'Select...'}
+                </span>
+                <ChevronDown size={14} style={{ flexShrink: 0, opacity: isStatusPill ? 0.6 : 1, color: isStatusPill ? 'inherit' : 'var(--text-muted)' }} />
+            </button>
+
+            {isOpen && (
+                <div style={{
+                    position: 'absolute',
+                    [dropdownAlign]: 0,
+                    top: '100%',
+                    marginTop: '0.25rem',
+                    minWidth: '180px',
+                    background: '#fff',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                    overflow: 'hidden',
+                    zIndex: 50
+                }}>
+                    <div style={{ padding: '0.25rem 0' }}>
+                        {options.map((opt) => {
+                            const optStyle = isStatusPill && getStatusColor && opt.value !== 'all' ? getStatusColor(opt.value) : {};
+                            const isActive = value === opt.value;
+                            return (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => {
+                                        onChange(opt.value);
+                                        setIsOpen(false);
+                                    }}
+                                    style={{
+                                        width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                        padding: '0.5rem 1rem', border: 'none', background: isActive ? 'var(--bg-hover)' : 'transparent',
+                                        color: isActive ? 'var(--text-main)' : 'var(--text-muted)',
+                                        fontSize: '0.85rem', fontWeight: isActive ? 600 : 400,
+                                        textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s'
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
+                                    onMouseOut={(e) => e.currentTarget.style.background = isActive ? 'var(--bg-hover)' : 'transparent'}
+                                >
+                                    {isStatusPill && opt.value !== 'all' && getStatusColor && (
+                                        <div style={{
+                                            width: '8px', height: '8px', borderRadius: '50%',
+                                            backgroundColor: optStyle.color, opacity: 0.8
+                                        }}></div>
+                                    )}
+                                    {opt.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function Orders() {
     const [orders, setOrders] = useState([]);
@@ -181,6 +281,31 @@ export default function Orders() {
     const handleStatusUpdate = async (orderId, newStatus) => {
         try {
             await updateDoc(doc(db, 'orders', orderId), { status: newStatus });
+
+            // Fire off an email notification via Firebase Trigger Email Extension
+            const order = orders.find(o => o.id === orderId);
+            if (order?.customer?.email) {
+                await addDoc(collection(db, 'mail'), {
+                    to: order.customer.email,
+                    message: {
+                        subject: `Chokepoint - Order Update: #${order.id.slice(0, 8)}`,
+                        html: `
+                            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+                                <h2 style="color: #111;">Order Status Update</h2>
+                                <p>Hello ${order.customer.firstName || 'Customer'},</p>
+                                <p>The status of your recent Chokepoint order (<strong>#${order.id}</strong>) has been updated to:</p>
+                                <div style="background-color: #f3f4f6; padding: 12px 20px; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px; margin: 10px 0;">
+                                    ${newStatus.replace('_', ' ').toUpperCase()}
+                                </div>
+                                <p style="margin-top: 20px;">If you have any questions, please contact our support team.</p>
+                                <br/>
+                                <p style="font-size: 12px; color: #666;">Thank you for shopping with Chokepoint.</p>
+                            </div>
+                        `
+                    }
+                });
+            }
+
             toast.success(`Order status updated to ${newStatus}`);
             setConfirmModal({ isOpen: false, orderId: null, newStatus: null });
         } catch (error) {
@@ -191,13 +316,14 @@ export default function Orders() {
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'paid': return 'bg-green-100 text-green-800';
-            case 'pending_payment': return 'bg-yellow-100 text-yellow-800';
-            case 'shipped': return 'bg-blue-100 text-blue-800';
-            case 'delivered': return 'bg-purple-100 text-purple-800';
-            case 'cancelled': return 'bg-red-100 text-red-800';
-            case 'refunded': return 'bg-orange-100 text-orange-800';
-            default: return 'bg-gray-100 text-gray-800';
+            case 'paid': return { backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' };
+            case 'pending_payment': return { backgroundColor: '#fef9c3', color: '#854d0e', borderColor: '#fef08a' };
+            case 'shipped': return { backgroundColor: '#dbeafe', color: '#1e40af', borderColor: '#bfdbfe' };
+            case 'delivered': return { backgroundColor: '#f3e8ff', color: '#6b21a8', borderColor: '#e9d5ff' };
+            case 'cancelled': return { backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#fecaca' };
+            case 'refunded': return { backgroundColor: '#ffedd5', color: '#9a3412', borderColor: '#fed7aa' };
+            case 'processing': return { backgroundColor: '#eff6ff', color: '#1e40af', borderColor: '#bfdbfe' };
+            default: return { backgroundColor: '#f3f4f6', color: '#374151', borderColor: '#e5e7eb' };
         }
     };
 
@@ -222,35 +348,31 @@ export default function Orders() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: '700' }}>Orders</h1>
 
-                <div className="flex gap-2">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
+                    <div style={{ position: 'relative', width: '220px' }}>
+                        <Search style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} size={16} />
                         <input
                             type="text"
                             placeholder="Search orders..."
-                            className="input input-sm pl-9 border border-gray-300 rounded-lg"
+                            className="input"
+                            style={{ paddingLeft: '2.5rem', height: '100%' }}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <select
-                        className="select select-bordered select-sm"
-                        value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value)}
-                    >
-                        <option value="all">All Statuses</option>
-                        <option value="pending_payment">Pending Payment</option>
-                        <option value="paid">Paid</option>
-                        <option value="processing">Processing</option>
-                        <option value="shipped">Shipped</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="cancelled">Cancelled</option>
-                        <option value="refunded">Refunded</option>
-                    </select>
+                    <div>
+                        <CustomDropdown
+                            value={filterStatus}
+                            onChange={setFilterStatus}
+                            options={FILTER_OPTIONS}
+                            dropdownAlign="right"
+                            buttonStyle={{ height: '38px' }}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -264,8 +386,7 @@ export default function Orders() {
                                 <th className="p-4">Customer</th>
                                 <th className="p-4">Total</th>
                                 <th className="p-4">Status</th>
-                                <th className="p-4">Actions</th>
-                                <th className="p-4"></th>
+                                <th className="p-4 text-right">More</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -283,30 +404,21 @@ export default function Orders() {
                                             <div className="text-xs text-gray-500">{order.customer?.email || 'N/A'}</div>
                                         </td>
                                         <td className="p-4 font-medium">₹{order.total?.toLocaleString() || '0'}</td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(order.status)}`}>
-                                                {order.status ? order.status.replace('_', ' ').toUpperCase() : 'UNKNOWN'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4">
-                                            <select
-                                                className="text-xs border border-gray-200 rounded p-1"
+                                        <td style={{ position: 'relative', padding: '0.75rem 1rem' }}>
+                                            <CustomDropdown
                                                 value={order.status}
-                                                onChange={(e) => confirmStatusUpdate(order.id, e.target.value)}
-                                            >
-                                                <option value="pending_payment">Pending Payment</option>
-                                                <option value="paid">Paid</option>
-                                                <option value="processing">Processing</option>
-                                                <option value="shipped">Shipped</option>
-                                                <option value="delivered">Delivered</option>
-                                                <option value="cancelled">Cancelled</option>
-                                                <option value="refunded">Refunded</option>
-                                            </select>
+                                                onChange={(newStatus) => confirmStatusUpdate(order.id, newStatus)}
+                                                options={STATUS_OPTIONS}
+                                                isStatusPill={true}
+                                                getStatusColor={getStatusColor}
+                                                dropdownAlign="left"
+                                            />
                                         </td>
-                                        <td className="p-4 text-right">
+                                        <td style={{ textAlign: 'right', padding: '0.75rem 1rem' }}>
                                             <button
                                                 onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
-                                                className="text-gray-400 hover:text-gray-600"
+                                                className="btn btn-ghost"
+                                                style={{ padding: '0.35rem 0.5rem' }}
                                             >
                                                 {expandedOrder === order.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                             </button>
@@ -315,7 +427,7 @@ export default function Orders() {
 
                                     {expandedOrder === order.id && (
                                         <tr className="expanded-row">
-                                            <td colSpan="7" style={{ padding: 0 }}>
+                                            <td colSpan="6" style={{ padding: 0 }}>
                                                 <div className="expanded-container">
 
                                                     <div className="expanded-header">

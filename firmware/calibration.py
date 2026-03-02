@@ -13,25 +13,31 @@ FRESH_AIR_FACTOR = 3.6  # Clean air factor for MQ-135
 def get_r0():
     print("Finding R0 in fresh air... please wait.")
     total_r0 = 0
-    samples = 50
+    samples = 100
     
     for _ in range(samples):
         raw = analog_pin.read()
-        # Convert raw to voltage (compensating for 11dB attenuation)
         v_out = raw * (3.3 / 4095) 
         
-        # Calculate Sensor Resistance (Rs)
-        # Formula: Rs = ((Vcc/Vout) - 1) * RL
-        if v_out > 0:
-            rs = ((5.0 / v_out) - 1) * RLOAD
+        if v_out > 0.1: # Eliminate noise
+            rs = ((5.0 / v_out) - 1.0) * RLOAD
             total_r0 += rs / FRESH_AIR_FACTOR
         
-        time.sleep(0.5)
+        time.sleep(0.1)
     
     final_r0 = total_r0 / samples
     print("Calibration Complete!")
     print("Your R0 value is:", final_r0)
+    
+    # Save to file for main.py to use
+    try:
+        with open("r0_value.txt", "w") as f:
+            f.write(str(final_r0))
+        print("R0 saved to r0_value.txt")
+    except Exception as e:
+        print("Failed to save R0:", e)
+        
     return final_r0
 
-# Run calibration
-R0 = get_r0()
+if __name__ == "__main__":
+    R0 = get_r0()

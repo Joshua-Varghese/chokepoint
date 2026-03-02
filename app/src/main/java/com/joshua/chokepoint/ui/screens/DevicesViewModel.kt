@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow // Add this
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 import com.joshua.chokepoint.data.mqtt.MqttRepository
 
@@ -82,17 +83,33 @@ class DevicesViewModel(
         }
     }
 
-    fun deleteDeviceFully(deviceId: String) {
+    fun deleteDeviceFully(deviceId: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
-            // 1. Try to factory reset the device remotely
             try {
+                // 1. Check if device is practically online
+                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                val doc = db.collection("devices").document(deviceId).get().await()
+                val lastSeen = doc.getTimestamp("lastSeen")
+                val now = com.google.firebase.Timestamp.now()
+                
+                // Require a heartbeat within the last 120 seconds
+                if (lastSeen == null || (now.seconds - lastSeen.seconds) > 120) {
+                    onError("Device is offline. Please power it on before unbinding.")
+                    return@launch
+                }
+
+                // 2. Factory reset the device remotely
                 mqttRepository.publishCommand(deviceId, "{\"cmd\": \"reset_wifi\"}")
+                
+                // Allow the MQTT packet to travel down the pipe
+                kotlinx.coroutines.delay(1000)
+                
+                // 3. Remove from Firestore registry
+                repository.removeDevice(deviceId)
+                onSuccess()
             } catch (e: Exception) {
-                // Ignore errors if device is already offline
+                onError("Failed to reset device: ${e.localizedMessage}")
             }
-            
-            // 2. Remove from Firestore (Nuclear option)
-            repository.removeDevice(deviceId)
         }
     }
 }

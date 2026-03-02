@@ -7,14 +7,12 @@ from wifi_manager import WifiManager
 from umqtt.simple import MQTTClient
 import urequests
 import ota
-try:
-    import mq135
-except ImportError:
-    mq135 = None
-
+import ota
 from discovery import Discovery
 import file_mgr
-print("Testing")
+import mq135_math
+import calibration
+print("Testing here")
 # --- Global State ---
 device_id = ubinascii.hexlify(machine.unique_id()).decode()
 wm = WifiManager()
@@ -82,14 +80,12 @@ def check_for_updates():
     except Exception as e:
         print("Update check failed:", e)
 
-# --- Sensor Mock if mq135 missing ---
-if mq135:
-    mq = mq135.MQ135(34) # Pin 34
-else:
-    class MockSensor:
-        def get_readings(self):
-            return {"co2": 400.0, "nh3": 0.05, "smoke": 10.0}
-    mq = MockSensor()
+# --- Real MQ135 Analog Sensor Init ---
+mq = machine.ADC(machine.Pin(34))
+mq.atten(machine.ADC.ATTN_11DB) # Read full 3.3V range
+# --- Real MQ135 Analog Sensor Init ---
+mq = machine.ADC(machine.Pin(34))
+mq.atten(machine.ADC.ATTN_11DB) # Read full 3.3V range
 
 def mqtt_callback(topic, msg):
     print("MSG:", topic, msg)
@@ -116,6 +112,12 @@ def mqtt_callback(topic, msg):
         elif cmd.get('cmd') == 'rm':
             status = fm.delete_file(cmd.get('path', ''))
             mqtt.publish(f"chokepoint/devices/{device_id}/res", json.dumps({"cmd": "rm", "path": cmd.get('path', ''), "status": status}))
+        elif cmd.get('cmd') == 'recalibrate':
+            print("Received Recalibrate Command! Running calibration...")
+            mqtt.publish(f"chokepoint/devices/{device_id}/status", "recalibrating")
+            calibration.get_r0()
+            time.sleep(1)
+            machine.reset()
         elif cmd.get('cmd') == 'restart':
             machine.reset()
     except:
@@ -168,6 +170,25 @@ def main():
         cmd_topic = f"chokepoint/devices/{device_id}/cmd"
         mqtt.subscribe(cmd_topic)
         
+        # Load R0 Calibration if it exists
+        r0_val = 76.63 # Default
+        try:
+            with open("r0_value.txt", "r") as f:
+                r0_val = float(f.read().strip())
+            print("Loaded R0:", r0_val)
+        except:
+            print("Using default R0")
+
+        
+        # Load R0 Calibration if it exists
+        r0_val = 76.63 # Default
+        try:
+            with open("r0_value.txt", "r") as f:
+                r0_val = float(f.read().strip())
+            print("Loaded R0:", r0_val)
+        except:
+            print("Using default R0")
+
         # Main Loop
         last_sensor_read = 0
         while True:
@@ -182,10 +203,32 @@ def main():
                 if now - last_sensor_read >= 2:
                     last_sensor_read = now
                     
-                    # Read Sensor
-                    data = mq.get_readings()
-                    data['device_id'] = device_id
-                    data['timestamp'] = int(now)
+                    # Read Real Sensor securely
+                    raw_gas = -1
+                    co2_ppm = -1
+                    sensor_error = None
+                    
+                    try:
+                        raw_gas = mq.read()
+                        if raw_gas <= 0 or raw_gas >= 4095:
+                            sensor_error = "Hardware Fault: Invalid Voltage"
+                        else:
+                            co2_ppm = mq135_math.get_ppm(raw_gas, r0_val)
+                    except Exception as e:
+                        sensor_error = str(e)
+                        
+                    local_ip = wm.sta_if.ifconfig()[0] if wm.sta_if.isconnected() else "Unknown"
+
+                    data = {
+                        "device_id": device_id,
+                        "timestamp": int(now),
+                        "gas_raw": raw_gas,
+                        "co2": co2_ppm,
+                        "smoke": 0.0,
+                        "nh3": 0.0,
+                        "local_ip": local_ip,
+                        "error": sensor_error
+                    }
                     
                     # Publish
                     payload = json.dumps(data)

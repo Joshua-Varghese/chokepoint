@@ -18,11 +18,9 @@ export default function Inventory() {
     const [activeTab, setActiveTab] = useState('all'); // all | module | accessory
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Form State — focused on parts (sensors/accessories)
     const [formData, setFormData] = useState({
         name: '', price: '', stock: '', type: 'module', imageUrl: '',
         category: 'monitors',
-        reorderThreshold: 5,
         specs: { requires_slot_type: 'uart', power_draw: 0 },
         constraints: { incompatible_with: [] },
         visibility: 'part'
@@ -57,8 +55,6 @@ export default function Inventory() {
         ? tabFiltered.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
         : tabFiltered;
 
-    // Stats
-    const lowStockCount = inventoryItems.filter(p => (p.stock || 0) < (p.reorderThreshold || 5)).length;
     const totalStock = inventoryItems.reduce((sum, p) => sum + (p.stock || 0), 0);
 
     const handleEdit = (product) => {
@@ -69,7 +65,6 @@ export default function Inventory() {
             type: product.type || 'module',
             imageUrl: product.imageUrl || '',
             category: product.category || 'monitors',
-            reorderThreshold: product.reorderThreshold || 5,
             specs: product.specs || { requires_slot_type: 'uart', power_draw: 0 },
             constraints: product.constraints || { incompatible_with: [] },
             visibility: 'part'
@@ -102,7 +97,6 @@ export default function Inventory() {
                 category: formData.category,
                 imageUrl: formData.imageUrl || 'https://via.placeholder.com/150',
                 visibility: 'part',
-                reorderThreshold: Number(formData.reorderThreshold) || 5,
                 updatedAt: serverTimestamp(),
                 specs: {
                     requires_slot_type: formData.specs?.requires_slot_type || 'uart',
@@ -149,7 +143,7 @@ export default function Inventory() {
         setEditingId(null);
         setFormData({
             name: '', price: '', stock: '', type: 'module', imageUrl: '',
-            category: 'monitors', reorderThreshold: 5,
+            category: 'monitors',
             specs: { requires_slot_type: 'uart', power_draw: 0 },
             constraints: { incompatible_with: [] }, visibility: 'part'
         });
@@ -161,7 +155,7 @@ export default function Inventory() {
     return (
         <div>
             {/* Stats Bar */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Plus size={20} color="#15803d" />
@@ -178,15 +172,6 @@ export default function Inventory() {
                     <div>
                         <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{totalStock}</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Stock</div>
-                    </div>
-                </div>
-                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', ...(lowStockCount > 0 ? { borderColor: '#fbbf24' } : {}) }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 8, background: lowStockCount > 0 ? '#fef3c7' : '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <AlertTriangle size={20} color={lowStockCount > 0 ? '#d97706' : '#a1a1aa'} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: lowStockCount > 0 ? '#d97706' : 'inherit' }}>{lowStockCount}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Low Stock</div>
                     </div>
                 </div>
             </div>
@@ -258,15 +243,11 @@ export default function Inventory() {
                                 {searchQuery ? 'No parts match your search.' : 'No parts in inventory. Add your first sensor or accessory!'}
                             </td></tr>
                         ) : filtered.map(p => {
-                            const isLowStock = (p.stock || 0) < (p.reorderThreshold || 5);
                             const typeInfo = TYPE_COLORS[p.type] || TYPE_COLORS.module;
                             return (
-                                <tr key={p.id} style={isLowStock ? { background: '#fffbeb' } : {}}>
+                                <tr key={p.id}>
                                     <td style={{ fontWeight: 500 }}>
                                         {p.name}
-                                        {isLowStock && (
-                                            <AlertTriangle size={14} color="#d97706" style={{ marginLeft: '0.4rem', verticalAlign: 'text-bottom' }} />
-                                        )}
                                     </td>
                                     <td>
                                         <span style={{
@@ -290,9 +271,9 @@ export default function Inventory() {
                                             onChange={e => handleQuickStockUpdate(p.id, e.target.value)}
                                             style={{
                                                 width: '60px', padding: '0.2rem 0.4rem', borderRadius: '4px',
-                                                border: `1px solid ${isLowStock ? '#fbbf24' : '#e4e4e7'}`,
+                                                border: '1px solid #e4e4e7',
                                                 fontSize: '0.85rem', textAlign: 'center',
-                                                background: isLowStock ? '#fffbeb' : '#fff'
+                                                background: '#fff'
                                             }}
                                         />
                                     </td>
@@ -342,7 +323,7 @@ export default function Inventory() {
                                 </div>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
                                     <label className="label">Price (₹)</label>
                                     <input type="number" className="input" required value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
@@ -350,10 +331,6 @@ export default function Inventory() {
                                 <div>
                                     <label className="label">Stock</label>
                                     <input type="number" className="input" required value={formData.stock} onChange={e => setFormData({ ...formData, stock: e.target.value })} />
-                                </div>
-                                <div>
-                                    <label className="label">Reorder At</label>
-                                    <input type="number" className="input" value={formData.reorderThreshold} onChange={e => setFormData({ ...formData, reorderThreshold: e.target.value })} />
                                 </div>
                             </div>
 

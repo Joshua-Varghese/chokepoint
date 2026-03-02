@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase-config';
-import mqtt from 'mqtt';
 import { ArrowLeft, Activity, Terminal, FileCode, RefreshCw, Save, Trash } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function DeviceDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
     const [device, setDevice] = useState(null);
-    const [status, setStatus] = useState('offline');
+    const [wsConnected, setWsConnected] = useState(false);
     const [consoleLogs, setConsoleLogs] = useState([]);
 
     // File Manager State
@@ -17,53 +17,59 @@ export default function DeviceDetail() {
     const [editingFile, setEditingFile] = useState(null); // { path: '', content: '' }
     const [editorContent, setEditorContent] = useState('');
 
-    // MQTT Client
-    const [mqttClient, setMqttClient] = useState(null);
+    // WebSocket Client State
+    const [wsClient, setWsClient] = useState(null);
+
+    // Timer state for reactive offline checking
+    const [currentTime, setCurrentTime] = useState(Date.now());
 
     useEffect(() => {
-        // Fetch Device Metadata
-        const fetchDevice = async () => {
-            const docRef = doc(db, 'devices', id);
-            const docSnap = await getDoc(docRef);
+        const timer = setInterval(() => setCurrentTime(Date.now()), 10000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        // Fetch Device Metadata Live
+        const docRef = doc(db, 'devices', id);
+        const unsubscribeDb = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
                 setDevice({ id: docSnap.id, ...docSnap.data() });
             }
+        });
+
+        // Connect to Local Node.js WebSocket Proxy
+        const ws = new WebSocket('ws://localhost:8080');
+
+        ws.onopen = () => {
+            console.log("WebSocket Proxy Connected");
+            setWsConnected(true);
+            ws.send(JSON.stringify({ action: 'subscribe', deviceId: id }));
         };
-        fetchDevice();
 
-        // Connect MQTT (WebSockets)
-        // Connect MQTT (WebSockets)
-        const client = mqtt.connect(import.meta.env.VITE_MQTT_BROKER_URL, {
-            username: import.meta.env.VITE_MQTT_USERNAME,
-            password: import.meta.env.VITE_MQTT_PASSWORD
-        });
-
-        client.on('connect', () => {
-            console.log("MQTT Connected");
-            setStatus('connected');
-            client.subscribe(`chokepoint/devices/${id}/res`, (err) => {
-                if (!err) console.log("Subscribed to responses");
-            });
-        });
-
-        client.on('message', (topic, message) => {
+        ws.onmessage = (event) => {
             try {
-                const payload = JSON.parse(message.toString());
+                const payload = JSON.parse(event.data);
                 handleMqttResponse(payload);
             } catch (e) {
-                console.error("Parse Error", e);
+                console.error("Parse Error from Proxy", e);
             }
-        });
+        };
 
-        client.on('error', (err) => {
-            console.error("MQTT Error:", err);
-            setStatus('error');
-        });
+        ws.onerror = (err) => {
+            console.error("WebSocket Error:", err);
+            setWsConnected(false);
+        };
 
-        setMqttClient(client);
+        ws.onclose = () => {
+            console.log("WebSocket Proxy Disconnected");
+            setWsConnected(false);
+        };
+
+        setWsClient(ws);
 
         return () => {
-            if (client) client.end();
+            if (ws) ws.close();
+            unsubscribeDb();
         };
     }, [id]);
 
@@ -77,7 +83,7 @@ export default function DeviceDetail() {
             setConsoleLogs(prev => [`[RES] Read ${res.path} (${res.content.length} bytes)`, ...prev]);
         } else if (res.cmd === 'write') {
             setConsoleLogs(prev => [`[RES] Write ${res.path}: ${res.status}`, ...prev]);
-            if (res.status === 'ok') alert('File Saved Successfully!');
+            if (res.status === 'ok') toast.success('File Saved Successfully!');
         } else if (res.cmd === 'rm') {
             setConsoleLogs(prev => [`[RES] Deleted ${res.path}: ${res.status}`, ...prev]);
             refreshFiles(); // Refresh list
@@ -85,8 +91,8 @@ export default function DeviceDetail() {
     };
 
     const sendCmd = (payload) => {
-        if (!mqttClient) return;
-        mqttClient.publish(`chokepoint/devices/${id}/cmd`, JSON.stringify(payload));
+        if (!wsClient || wsClient.readyState !== WebSocket.OPEN) return;
+        wsClient.send(JSON.stringify({ action: 'publish', deviceId: id, payload: payload }));
         setConsoleLogs(prev => [`[CMD] ${payload.cmd} ${payload.path || ''}`, ...prev]);
     };
 
@@ -100,8 +106,19 @@ export default function DeviceDetail() {
         sendCmd({ cmd: 'write', path: editingFile, content: editorContent });
     };
     const restartDevice = () => sendCmd({ cmd: 'restart' });
+    const recalibrateDevice = () => sendCmd({ cmd: 'recalibrate' });
 
     if (!device) return <div style={{ padding: '2rem' }}>Loading...</div>;
+
+    // Calculate actual device status based on last heartbeat (30-second threshold)
+    const isOnline = () => {
+        if (!device?.lastSeen) return false;
+        const lastPingSeconds = device.lastSeen.seconds || device.lastSeen._seconds;
+        if (!lastPingSeconds) return false;
+        return (currentTime / 1000) - lastPingSeconds < 30;
+    };
+
+    const deviceStatus = isOnline() ? 'connected' : 'offline';
 
     return (
         <div>
@@ -115,12 +132,28 @@ export default function DeviceDetail() {
                     <p style={{ color: 'var(--text-muted)' }}>ID: {device.id}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <div className="badge" style={{ background: status === 'connected' ? '#dcfce7' : '#fee2e2', color: status === 'connected' ? '#166534' : '#991b1b', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '0.875rem', fontWeight: '500' }}>
-                        MQTT: {status}
+                    {!wsConnected && (
+                        <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '500' }}>Proxy Disconnected</span>
+                    )}
+                    <div className="badge" style={{ background: deviceStatus === 'connected' ? '#dcfce7' : '#fee2e2', color: deviceStatus === 'connected' ? '#166534' : '#991b1b', padding: '0.25rem 0.75rem', borderRadius: '99px', fontSize: '0.875rem', fontWeight: '500' }}>
+                        MQTT: {deviceStatus}
                     </div>
-                    <button onClick={restartDevice} className="btn btn-outline" style={{ fontSize: '0.8rem' }}>Reboot Device</button>
+                    <button onClick={recalibrateDevice} className="btn btn-outline" style={{ fontSize: '0.8rem' }} disabled={deviceStatus !== 'connected'}>Recalibrate</button>
+                    <button onClick={restartDevice} className="btn btn-outline" style={{ fontSize: '0.8rem' }} disabled={deviceStatus !== 'connected'}>Reboot Device</button>
                 </div>
             </div>
+
+            {device.sensorError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #f87171', color: '#b91c1c', padding: '1rem', borderRadius: '0.5rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <strong style={{ display: 'block', marginBottom: '0.25rem' }}>Hardware Sensor Fault Detected</strong>
+                        <span style={{ fontSize: '0.875rem' }}>{device.sensorError}</span>
+                    </div>
+                    <button onClick={recalibrateDevice} className="btn btn-primary" style={{ background: '#b91c1c', border: 'none', fontSize: '0.875rem' }} disabled={deviceStatus !== 'connected'}>
+                        Force Recalibration
+                    </button>
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
                 {/* Left Column: List */}
