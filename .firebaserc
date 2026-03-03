@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "chokepoint-android"
+  },
+  "targets": {
+    "chokepoint-android": {
+      "hosting": {
+        "admin": [
+          "chokepoint-android-admin"
+        ],
+        "store": [
+          "chokepoint-android-store"
+        ]
+      }
+    }
   }
 }

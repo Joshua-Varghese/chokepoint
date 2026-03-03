@@ -21,6 +21,25 @@ import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import com.joshua.chokepoint.ui.theme.TextDark
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import java.util.concurrent.TimeUnit
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
+
+enum class TimeFilter(val label: String, val durationMillis: Long) {
+    ALL("All Time", Long.MAX_VALUE),
+    MINS_5("5 Mins", TimeUnit.MINUTES.toMillis(5)),
+    MINS_10("10 Mins", TimeUnit.MINUTES.toMillis(10)),
+    MINS_30("30 Mins", TimeUnit.MINUTES.toMillis(30)),
+    HOUR_1("1 Hour", TimeUnit.HOURS.toMillis(1)),
+    HOURS_24("24 Hours", TimeUnit.HOURS.toMillis(24))
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,19 +49,32 @@ fun AnalyticsScreen(
     onBackClick: () -> Unit
 ) {
     val readings = remember { mutableStateListOf<SensorData>() }
+    var selectedFilter by remember { mutableStateOf(TimeFilter.ALL) }
+    var isLoading by remember { mutableStateOf(true) }
     
     LaunchedEffect(deviceId) {
+        isLoading = true
         if(deviceId.isNotEmpty()) {
-            val history = repository.getHistoricalReadings(deviceId, 300)
+            val history = repository.getHistoricalReadings(deviceId, 2000)
             readings.clear()
             readings.addAll(history)
+        }
+        isLoading = false
+    }
+
+    val currentTime = System.currentTimeMillis()
+    val filteredReadings = remember(readings, selectedFilter) {
+        if (selectedFilter == TimeFilter.ALL) {
+            readings
+        } else {
+            readings.filter { currentTime - it.timestamp <= selectedFilter.durationMillis }
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sensor History", color = MaterialTheme.colorScheme.onBackground) },
+                title = { Text(if (deviceId == "home") "Global Reports" else "Sensor History", color = MaterialTheme.colorScheme.onBackground) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onBackground)
@@ -58,37 +90,141 @@ fun AnalyticsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (readings.isEmpty()) {
+            if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No history yet. Wait for sensor data...", color = MaterialTheme.colorScheme.onBackground)
+                    CircularProgressIndicator()
                 }
+            } else if (deviceId == "home") {
+                ReportsView(readings)
             } else {
-                Text(
-                    "CO₂ Trend (Last ${readings.size} readings)",
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                // Device specific analytics
+                ScrollableFilterRow(
+                    selectedFilter = selectedFilter,
+                    onFilterSelected = { selectedFilter = it }
                 )
                 
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = CardGrey),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .height(200.dp)
-                ) {
-                    SensorChart(data = readings, modifier = Modifier.fillMaxSize().padding(16.dp))
-                }
-                
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(readings) { item ->
-                        HistoryCard(item)
+                if (filteredReadings.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
+                        Text("No data for selected time range.", color = MaterialTheme.colorScheme.onBackground)
+                    }
+                } else {
+                    Text(
+                        "CO₂ Trend (Last ${filteredReadings.size} readings)",
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = CardGrey),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .height(200.dp)
+                    ) {
+                        SensorChart(data = filteredReadings, modifier = Modifier.fillMaxSize().padding(16.dp))
+                    }
+                    
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(filteredReadings) { item ->
+                            HistoryCard(item)
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ScrollableFilterRow(
+    selectedFilter: TimeFilter,
+    onFilterSelected: (TimeFilter) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TimeFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = selectedFilter == filter,
+                onClick = { onFilterSelected(filter) },
+                label = { Text(filter.label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun ReportsView(allReadings: List<SensorData>) {
+    val currentTime = System.currentTimeMillis()
+    val dayMillis = TimeUnit.DAYS.toMillis(1)
+    val weekMillis = TimeUnit.DAYS.toMillis(7)
+    val monthMillis = TimeUnit.DAYS.toMillis(30)
+
+    val dailyReadings = allReadings.filter { currentTime - it.timestamp <= dayMillis }
+    val weeklyReadings = allReadings.filter { currentTime - it.timestamp <= weekMillis }
+    val monthlyReadings = allReadings.filter { currentTime - it.timestamp <= monthMillis }
+
+    fun calculateAverages(readings: List<SensorData>): Pair<Int, Float> {
+        if (readings.isEmpty()) return Pair(0, 0f)
+        val avgCo2 = readings.map { it.co2 }.average().toInt()
+        val avgSmoke = readings.map { it.smoke }.average().toFloat()
+        return Pair(avgCo2, avgSmoke)
+    }
+
+    val (dailyCo2, dailySmoke) = calculateAverages(dailyReadings)
+    val (weeklyCo2, weeklySmoke) = calculateAverages(weeklyReadings)
+    val (monthlyCo2, monthlySmoke) = calculateAverages(monthlyReadings)
+    val (allTimeCo2, allTimeSmoke) = calculateAverages(allReadings)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()) // Allow scrolling if screen is small
+    ) {
+        Text("Historical Averages", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        ReportCard(title = "Daily Average (Last 24h)", co2 = dailyCo2, smoke = dailySmoke, count = dailyReadings.size)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        ReportCard(title = "Weekly Average (Last 7 Days)", co2 = weeklyCo2, smoke = weeklySmoke, count = weeklyReadings.size)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        ReportCard(title = "Monthly Average (Last 30 Days)", co2 = monthlyCo2, smoke = monthlySmoke, count = monthlyReadings.size)
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        ReportCard(title = "All-Time Average", co2 = allTimeCo2, smoke = allTimeSmoke, count = allReadings.size)
+    }
+}
+
+@Composable
+fun ReportCard(title: String, co2: Int, smoke: Float, count: Int) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardGrey),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextDark)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("CO₂: $co2 ppm", color = TextDark)
+                Text("Smoke: ${String.format("%.1f", smoke)}", color = TextDark)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Based on $count readings", style = MaterialTheme.typography.bodySmall, color = TextDark.copy(alpha=0.7f))
         }
     }
 }
@@ -99,20 +235,73 @@ fun SensorChart(data: List<SensorData>, modifier: Modifier = Modifier) {
     val sorted = data.sortedBy { it.timestamp }
     val maxVal = sorted.maxOfOrNull { it.co2 }?.coerceAtLeast(100.0) ?: 100.0
     val minVal = sorted.minOfOrNull { it.co2 }?.coerceAtMost(0.0) ?: 0.0
-    val range = (maxVal - minVal).coerceAtLeast(1.0)
+    // Pad the range slightly so the top/bottom line doesn't hug the very edge of the graph
+    val paddedMax = maxVal + (maxVal - minVal) * 0.1
+    val paddedMin = (minVal - (maxVal - minVal) * 0.1).coerceAtLeast(0.0)
+    val range = (paddedMax - paddedMin).coerceAtLeast(1.0)
     
     val minTime = sorted.first().timestamp
     val maxTime = sorted.last().timestamp
     val timeRange = (maxTime - minTime).coerceAtLeast(1L).toFloat()
 
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = TextStyle(fontSize = 10.sp, color = TextDark.copy(alpha = 0.6f))
+
     Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
+        // Reserve space for Y-axis labels (left) and X-axis labels (bottom)
+        val yAxisWidth = 40.dp.toPx()
+        val xAxisHeight = 20.dp.toPx()
         
+        val chartWidth = size.width - yAxisWidth
+        val chartHeight = size.height - xAxisHeight
+        
+        // --- Draw Grid Lines and Y-Axis Labels ---
+        val steps = 4
+        for (i in 0..steps) {
+            val yPos = chartHeight - (i.toFloat() / steps) * chartHeight
+            val value = paddedMin + (i.toFloat() / steps) * range
+            
+            // Grid Line
+            drawLine(
+                color = TextDark.copy(alpha = 0.1f),
+                start = Offset(yAxisWidth, yPos),
+                end = Offset(size.width, yPos),
+                strokeWidth = 1f
+            )
+            
+            // Label
+            val textLayoutResult = textMeasurer.measure(
+                text = "${value.toInt()}",
+                style = labelStyle
+            )
+            drawText(
+                textLayoutResult = textLayoutResult,
+                topLeft = Offset(
+                    x = yAxisWidth - textLayoutResult.size.width - 8.dp.toPx(),
+                    y = yPos - (textLayoutResult.size.height / 2)
+                )
+            )
+        }
+
+        // --- Draw X-Axis Labels ---
+        // Just draw start and end labels for simplicity
+        val startLabel = textMeasurer.measure("Older", labelStyle)
+        val endLabel = textMeasurer.measure("Now", labelStyle)
+        
+        drawText(
+            textLayoutResult = startLabel,
+            topLeft = Offset(yAxisWidth, size.height - xAxisHeight + 4.dp.toPx())
+        )
+        drawText(
+            textLayoutResult = endLabel,
+            topLeft = Offset(size.width - endLabel.size.width, size.height - xAxisHeight + 4.dp.toPx())
+        )
+
+        // --- Draw Data Line ---
         val path = Path()
         sorted.forEachIndexed { index, dp ->
-            val x = if (timeRange > 0f) width * ((dp.timestamp - minTime).toFloat() / timeRange) else 0f
-            val y = height - (((dp.co2 - minVal) / range).toFloat() * height)
+            val x = yAxisWidth + if (timeRange > 0f) chartWidth * ((dp.timestamp - minTime).toFloat() / timeRange) else 0f
+            val y = chartHeight - (((dp.co2 - paddedMin) / range).toFloat() * chartHeight)
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         
@@ -138,20 +327,30 @@ fun HistoryCard(data: SensorData) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val statusColor = if (data.airQuality == "Hazardous" || data.airQuality == "Poor") androidx.compose.ui.graphics.Color.Red else androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                    Surface(
+                        modifier = Modifier.size(10.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = statusColor
+                    ) {}
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = java.text.SimpleDateFormat("MMM dd, HH:mm:ss", java.util.Locale.getDefault()).format(data.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextDark.copy(alpha = 0.7f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()).format(data.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = "CO2: ${data.co2.toInt()} ppm",
+                    text = "CO₂: ${data.co2.toInt()} ppm",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = TextDark
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("Smoke: ${String.format("%.1f", data.smoke)}", color = MaterialTheme.colorScheme.onSurface)
+                Text("Smoke: ${String.format("%.1f", data.smoke)}", color = TextDark)
             }
         }
     }

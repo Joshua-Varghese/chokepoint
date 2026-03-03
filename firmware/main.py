@@ -7,7 +7,6 @@ from wifi_manager import WifiManager
 from umqtt.simple import MQTTClient
 import urequests
 import ota
-import ota
 from discovery import Discovery
 import file_mgr
 import mq135_math

@@ -60,36 +60,7 @@ fun DashboardScreen(
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pageCount })
 
     Scaffold(
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                    label = { Text("Home") },
-                    selected = true,
-                    onClick = { }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Sensors, contentDescription = "Devices") },
-                    label = { Text("Devices") },
-                    selected = false,
-                    onClick = { onDevicesClick() }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.ShoppingBag, contentDescription = "Market") },
-                    label = { Text("Market") },
-                    selected = false,
-                    onClick = { onMarketplaceClick() }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings") },
-                    selected = false,
-                    onClick = { onSettingsClick() } 
-                )
-            }
-        },
+        // Bottom bar moved to AppNavigation
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onAddDeviceClick() },

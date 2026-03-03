@@ -8,7 +8,9 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
+import androidx.compose.material3.Scaffold
 import com.google.firebase.auth.FirebaseAuth
 import com.joshua.chokepoint.data.firestore.FirestoreRepository
 import com.joshua.chokepoint.data.mqtt.MqttRepository
@@ -28,6 +30,8 @@ import com.joshua.chokepoint.ui.screens.*
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.foundation.layout.padding
+import com.joshua.chokepoint.ui.components.AppBottomBar
 
 fun Context.findActivity(): Activity? {
     var context = this
@@ -56,12 +60,25 @@ fun AppNavigation(modifier: Modifier = Modifier) {
     val discoveryRepository = remember { DiscoveryRepository(context) }
     val settingsRepository = remember { SettingsRepository(context) }
 
-    NavHost(
-        navController = navController,
-        startDestination = startDestination,
-        modifier = modifier
-    ) {
-        composable("login") {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    Scaffold(
+        bottomBar = {
+            if (currentRoute in listOf("dashboard", "devices", "marketplace", "settings")) {
+                AppBottomBar(
+                    navController = navController,
+                    currentRoute = currentRoute
+                )
+            }
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            modifier = modifier.padding(innerPadding)
+        ) {
+            composable("login") {
             LoginScreen(
                 isLoading = false, // Should be managed by a ViewModel ideally
                 onLoginClick = { email, password ->
@@ -291,6 +308,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                  onBackClick = { navController.popBackStack() },
                  onProvisionComplete = { navController.popBackStack() }
              )
+        }
         }
     }
 }
