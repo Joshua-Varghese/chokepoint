@@ -26,6 +26,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import java.util.concurrent.TimeUnit
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
 
 enum class TimeFilter(val label: String, val durationMillis: Long) {
     ALL("All Time", Long.MAX_VALUE),
@@ -230,20 +235,73 @@ fun SensorChart(data: List<SensorData>, modifier: Modifier = Modifier) {
     val sorted = data.sortedBy { it.timestamp }
     val maxVal = sorted.maxOfOrNull { it.co2 }?.coerceAtLeast(100.0) ?: 100.0
     val minVal = sorted.minOfOrNull { it.co2 }?.coerceAtMost(0.0) ?: 0.0
-    val range = (maxVal - minVal).coerceAtLeast(1.0)
+    // Pad the range slightly so the top/bottom line doesn't hug the very edge of the graph
+    val paddedMax = maxVal + (maxVal - minVal) * 0.1
+    val paddedMin = (minVal - (maxVal - minVal) * 0.1).coerceAtLeast(0.0)
+    val range = (paddedMax - paddedMin).coerceAtLeast(1.0)
     
     val minTime = sorted.first().timestamp
     val maxTime = sorted.last().timestamp
     val timeRange = (maxTime - minTime).coerceAtLeast(1L).toFloat()
 
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = TextStyle(fontSize = 10.sp, color = TextDark.copy(alpha = 0.6f))
+
     Canvas(modifier = modifier) {
-        val width = size.width
-        val height = size.height
+        // Reserve space for Y-axis labels (left) and X-axis labels (bottom)
+        val yAxisWidth = 40.dp.toPx()
+        val xAxisHeight = 20.dp.toPx()
         
+        val chartWidth = size.width - yAxisWidth
+        val chartHeight = size.height - xAxisHeight
+        
+        // --- Draw Grid Lines and Y-Axis Labels ---
+        val steps = 4
+        for (i in 0..steps) {
+            val yPos = chartHeight - (i.toFloat() / steps) * chartHeight
+            val value = paddedMin + (i.toFloat() / steps) * range
+            
+            // Grid Line
+            drawLine(
+                color = TextDark.copy(alpha = 0.1f),
+                start = Offset(yAxisWidth, yPos),
+                end = Offset(size.width, yPos),
+                strokeWidth = 1f
+            )
+            
+            // Label
+            val textLayoutResult = textMeasurer.measure(
+                text = "${value.toInt()}",
+                style = labelStyle
+            )
+            drawText(
+                textLayoutResult = textLayoutResult,
+                topLeft = Offset(
+                    x = yAxisWidth - textLayoutResult.size.width - 8.dp.toPx(),
+                    y = yPos - (textLayoutResult.size.height / 2)
+                )
+            )
+        }
+
+        // --- Draw X-Axis Labels ---
+        // Just draw start and end labels for simplicity
+        val startLabel = textMeasurer.measure("Older", labelStyle)
+        val endLabel = textMeasurer.measure("Now", labelStyle)
+        
+        drawText(
+            textLayoutResult = startLabel,
+            topLeft = Offset(yAxisWidth, size.height - xAxisHeight + 4.dp.toPx())
+        )
+        drawText(
+            textLayoutResult = endLabel,
+            topLeft = Offset(size.width - endLabel.size.width, size.height - xAxisHeight + 4.dp.toPx())
+        )
+
+        // --- Draw Data Line ---
         val path = Path()
         sorted.forEachIndexed { index, dp ->
-            val x = if (timeRange > 0f) width * ((dp.timestamp - minTime).toFloat() / timeRange) else 0f
-            val y = height - (((dp.co2 - minVal) / range).toFloat() * height)
+            val x = yAxisWidth + if (timeRange > 0f) chartWidth * ((dp.timestamp - minTime).toFloat() / timeRange) else 0f
+            val y = chartHeight - (((dp.co2 - paddedMin) / range).toFloat() * chartHeight)
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         

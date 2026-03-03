@@ -1,0 +1,46 @@
+name: Deploy Store Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'store-frontend/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/hosting_store.yml'
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: './store-frontend/package-lock.json'
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: ./store-frontend
+
+      - name: Build Store Frontend
+        run: npm run build
+        working-directory: ./store-frontend
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Decode Firebase service account JSON
+        env:
+          SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+        run: echo "$SERVICE_ACCOUNT_BASE64" | base64 --decode > firebase-key.json
+
+      - name: Deploy to Firebase Hosting (Store)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ github.workspace }}/firebase-key.json"
+        run: firebase deploy --only hosting:store --project chokepoint-android

@@ -4,6 +4,7 @@ import ubinascii
 import machine
 import json
 import socket
+import gc
 
 class WifiManager:
     def __init__(self, config_file="wifi.json"):
@@ -61,15 +62,18 @@ class WifiManager:
 
     def run_provisioning_server(self):
         self.start_ap()
+        gc.collect() # Clean up memory for the server
         
         # Simple HTTP Server for Provisioning
         addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
         s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Allow port reuse
         s.bind(addr)
         s.listen(1)
         print('Provisioning Server Listening on', addr)
 
         while True:
+            cl = None
             try:
                 cl, addr = s.accept()
                 cl.settimeout(3.0) # Avoid hanging
@@ -86,11 +90,9 @@ class WifiManager:
                     continue
 
                 if not raw_req:
-                    print("Empty Request")
                     cl.close()
                     continue
                 
-                print("Raw Request:", raw_req)
                 request_line = raw_req.decode().strip()
                 
                 # Consume Headers (prevent blocking)
@@ -101,8 +103,6 @@ class WifiManager:
                             break
                     except:
                         break
-
-                print("Parsed Request:", request_line)
                 
                 # Parsing Logic
                 if 'GET /save?' in request_line:
@@ -140,10 +140,8 @@ class WifiManager:
                             cl.close()
                             time.sleep(2)
                             machine.reset()
-                        else:
-                            print("Ignored empty SSID")
                     except Exception as e:
-                        print("Parse Error", e)
+                        print("Provisioning Save Error", e)
 
                 # Serve Form
                 response = """HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n
@@ -160,10 +158,11 @@ class WifiManager:
                 </head>
                 <body>
                     <h2>Setup WiFi</h2>
+                    <p>Connect your Chokepoint device to WiFi</p>
                     <form action="/save" method="get">
                         <input name="ssid" placeholder="WiFi Name (SSID)" required>
                         <input name="password" type="password" placeholder="Password">
-                        <button type="submit">save</button>
+                        <button type="submit">SAVE & RESTART</button>
                     </form>
                 </body>
                 </html>
@@ -171,9 +170,11 @@ class WifiManager:
                 cl.send(response.encode())
                 
             except Exception as e:
-                print("Server Error", e)
+                print("Provisioning Loop Error:", e)
             finally:
-                try: cl.close()
-                except: pass
+                if cl:
+                    try: cl.close()
+                    except: pass
+                gc.collect()
 
 
