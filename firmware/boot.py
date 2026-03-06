@@ -21,6 +21,11 @@ def bootloader_ota_check():
     print(f"Connecting to {ssid} for OTA Check...")
     if not wm.connect(ssid, password):
         print("WiFi Failed. Booting main.py...")
+        # Signal to main.py that we already tried so it can skip straight to provisioning
+        try:
+            with open("wifi_failed.flag", "w") as f:
+                f.write("1")
+        except: pass
         return
         
     print("WiFi Connected. Checking GitHub for OTA updates...")

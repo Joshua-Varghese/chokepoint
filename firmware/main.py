@@ -129,9 +129,21 @@ def main():
     
     # 1. Try to load and connect WiFi
     ssid, password = wm.load_config()
-    connected = False
+    connected = wm.sta_if.isconnected()
     
-    if ssid:
+    # Check if boot.py already tried and failed - skip wasteful retry
+    already_failed = False
+    try:
+        import os
+        os.remove("wifi_failed.flag")  # Read and immediately delete flag
+        already_failed = True
+        print("boot.py already tried WiFi — skipping retry, going to provisioning.")
+    except:
+        pass
+    
+    if connected:
+        print(f"Already connected to WiFi! IP: {wm.sta_if.ifconfig()[0]}")
+    elif ssid and not already_failed:
         print(f"Found Config for {ssid}")
         connected = wm.connect(ssid, password)
     

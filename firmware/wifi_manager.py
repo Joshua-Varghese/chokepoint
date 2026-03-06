@@ -42,6 +42,12 @@ class WifiManager:
             return False
 
     def start_ap(self):
+        # Explicitly disable STA to stop background scanning from breaking AP mode
+        if self.sta_if.active():
+            try: self.sta_if.disconnect()
+            except: pass
+            self.sta_if.active(False)
+            
         self.ap_if.active(True)
         ssid = 'Chokepoint-' + self.get_device_id()
         self.ap_if.config(essid=ssid, authmode=0)
@@ -51,6 +57,13 @@ class WifiManager:
 
     def connect(self, ssid, password):
         self.sta_if.active(True)
+        # Clear any pending connection state before starting a new one
+        if self.sta_if.isconnected():
+            self.sta_if.disconnect()
+        else:
+            try: self.sta_if.disconnect() # Force clear error state
+            except: pass
+            
         self.sta_if.connect(ssid, password)
         print('Connecting to', ssid, '...')
         for _ in range(20):
