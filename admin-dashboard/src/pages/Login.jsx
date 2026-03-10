@@ -47,7 +47,6 @@ export default function Login() {
                             className="input"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="admin@chokepoint.com"
                             required
                         />
                     </div>
@@ -58,7 +57,6 @@ export default function Login() {
                             className="input"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
                             required
                         />
                     </div>

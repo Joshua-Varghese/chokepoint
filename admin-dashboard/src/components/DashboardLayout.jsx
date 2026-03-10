@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase-config';
-import { LayoutDashboard, Package, Warehouse, ShoppingBag, Router, Users, LogOut, ChevronLeft, Menu } from 'lucide-react';
+import { LayoutDashboard, Package, Warehouse, ShoppingBag, Router, Users, LogOut, ChevronLeft, Menu, Wind } from 'lucide-react';
 
 export default function DashboardLayout() {
     const navigate = useNavigate();
@@ -34,7 +34,7 @@ export default function DashboardLayout() {
                 </button>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'flex-start', gap: '0.75rem', marginBottom: '2rem' }}>
-                    <div style={{ width: '24px', height: '24px', background: '#000', borderRadius: '4px', flexShrink: 0 }}></div>
+                    <Wind size={28} style={{ color: '#000', flexShrink: 0 }} />
                     {!isCollapsed && <h2 style={{ fontSize: '1.25rem', fontWeight: '700', whiteSpace: 'nowrap' }}>Chokepoint</h2>}
                 </div>
 
@@ -50,7 +50,8 @@ export default function DashboardLayout() {
                                 padding: isCollapsed ? '0.5rem' : '0.5rem 1rem',
                                 background: isActive ? '#000' : 'transparent',
                                 color: isActive ? '#fff' : '#000',
-                                border: isActive ? 'none' : '1px solid transparent'
+                                border: isActive ? 'none' : '1px solid transparent',
+                                textDecoration: 'none'
                             })}
                         >
                             <div style={{ flexShrink: 0, display: 'flex' }}>{item.icon}</div>
