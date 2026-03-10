@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.joshua.chokepoint.ui.theme.MintBackground
+import com.joshua.chokepoint.ui.theme.DarkGreen
 import com.joshua.chokepoint.ui.theme.TextLight
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,10 +35,10 @@ fun ProvisioningScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextLight)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MintBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkGreen)
             )
         },
-        containerColor = MintBackground
+        containerColor = DarkGreen
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -63,13 +63,13 @@ fun ProvisioningScreen(
                 style = MaterialTheme.typography.bodyLarge
             )
 
-            Button(
+            OutlinedButton(
                 onClick = {
                     context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextLight)
             ) {
                 Text("Open WiFi Settings")
             }
@@ -80,17 +80,22 @@ fun ProvisioningScreen(
                      context.startActivity(intent)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary, // MintGreen
+                    contentColor = MaterialTheme.colorScheme.onPrimary  // DarkGreen
+                )
             ) {
-                Text("Configure Device (Open Browser)")
+                Text("Configure Device (Open Browser)", fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            Button(
+            OutlinedButton(
                 onClick = onProvisionComplete,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextLight)
             ) {
                 Text("I'm Done")
             }

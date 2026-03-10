@@ -89,6 +89,14 @@ class DevicesViewModel(
                 // 1. Check if device is practically online
                 val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 val doc = db.collection("devices").document(deviceId).get().await()
+                
+                if (!doc.exists()) {
+                    // Ghost device: global registry is already gone. Clean up user's private list.
+                    repository.removeDevice(deviceId)
+                    onSuccess()
+                    return@launch
+                }
+
                 val lastSeen = doc.getTimestamp("lastSeen")
                 val now = com.google.firebase.Timestamp.now()
                 
