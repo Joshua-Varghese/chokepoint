@@ -1,0 +1,17 @@
+version: 1.0
+runtime: nodejs20
+build:
+  commands:
+    build:
+      - npm install --omit=dev
+run:
+  command: node mqtt_bridge.js
+  network:
+    port: 8080
+  env:
+    - name: MQTT_URL
+      value-source: SecretsManager
+    - name: MQTT_USERNAME
+      value-source: SecretsManager
+    - name: MQTT_PASSWORD
+      value-source: SecretsManager
