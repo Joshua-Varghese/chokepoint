@@ -14,7 +14,9 @@
 .externalNativeBuild
 .cxx
 google-services.json
-scripts/
-!scripts/seed_marketplace.js
+# Scripts folder — ignore secrets and dependencies, but track source files
+scripts/node_modules/
+scripts/.env
+scripts/service-account.json
 firmware/secrets.py
 firmware/boot.py
