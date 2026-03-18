@@ -6,7 +6,7 @@ WORKDIR /app
 COPY scripts/package*.json ./
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Copy the rest of the scripts (service-account.json injected at build time by CI)
 COPY scripts/ .
