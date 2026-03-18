@@ -314,7 +314,7 @@ fun SensorChart(data: List<SensorData>, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun HistoryCard(data: SensorData) {
+ fun HistoryCard(data: SensorData) {
     Card(
         colors = CardDefaults.cardColors(containerColor = CardGrey),
         modifier = Modifier.fillMaxWidth()

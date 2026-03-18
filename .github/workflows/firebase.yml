@@ -5,22 +5,27 @@ on:
     branches:
       - main
     paths:
-      firebase.json
-      firestore.rules
-      firestore.indexes.json
+      - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - '.github/workflows/firebase.yml'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-  steps:
-    - name: Checkout repo
-      uses: action/checkout@v4
-    
-    - name: Install Firebase CLI
-      run: npm install -g firebase-tools
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    - name: Deploy Firebase Rules
-      run: firebase deploy --only firestore
-      env: 
-      FIREBASE_TOKEN:${{secrets.FIREBASE_TOKEN}}
+      - name: Decode Firebase service account JSON
+        env:
+          SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+        run: echo "$SERVICE_ACCOUNT_BASE64" | base64 --decode > firebase-key.json
 
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Firebase Rules & Indexes
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ github.workspace }}/firebase-key.json"
+        run: firebase deploy --only firestore --project chokepoint-android
