@@ -2,14 +2,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files first for layer caching
-COPY scripts/package*.json ./
+# Copy all scripts (package.json, package-lock.json, mqtt_bridge.js, etc.)
+COPY scripts/ .
 
 # Install production dependencies only
 RUN npm install --omit=dev
-
-# Copy the rest of the scripts (service-account.json injected at build time by CI)
-COPY scripts/ .
 
 # Expose WebSocket proxy port
 EXPOSE 8080
