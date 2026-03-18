@@ -67,6 +67,5 @@ jobs:
       - name: Upload APK to S3 (public website download)
         run: |
           aws s3 cp app/build/outputs/apk/debug/app-debug.apk \
-            s3://${{ secrets.S3_BUCKET_NAME }}/releases/chokepoint-latest.apk \
-            --acl public-read
+            s3://${{ secrets.S3_BUCKET_NAME }}/releases/chokepoint-latest.apk
           echo "✅ APK available at: https://${{ secrets.S3_BUCKET_NAME }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/releases/chokepoint-latest.apk"
