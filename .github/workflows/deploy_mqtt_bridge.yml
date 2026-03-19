@@ -14,19 +14,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          SERVICE_ACCOUNT_BASE64: ${{ secrets.SERVICE_ACCOUNT_BASE64 }}
-          MQTT_URL: mqtt://puffin.rmq2.cloudamqp.com:1883
-          MQTT_USERNAME: ${{ secrets.MQTT_USERNAME }}
-          MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: SERVICE_ACCOUNT_BASE64,MQTT_URL,MQTT_USERNAME,MQTT_PASSWORD
           script: |
             set -e
 
@@ -40,20 +33,18 @@ jobs:
             cd /home/ubuntu
             if [ ! -d "chokepoint" ]; then
               git clone https://github.com/Joshua-Varghese/chokepoint.git
-              cd chokepoint
-            else
-              cd chokepoint
-              git pull origin main
             fi
+            cd chokepoint
+            git pull origin main
 
             # 2. Restore Firebase service account from secret
-            echo "$SERVICE_ACCOUNT_BASE64" | base64 --decode > scripts/service-account.json
+            echo "${{ secrets.SERVICE_ACCOUNT_BASE64 }}" | base64 --decode > scripts/service-account.json
 
             # 3. Write .env file with MQTT credentials
             cat > scripts/.env << EOF
             MQTT_URL=mqtt://puffin.rmq2.cloudamqp.com:1883
-            MQTT_USERNAME=$MQTT_USERNAME
-            MQTT_PASSWORD=$MQTT_PASSWORD
+            MQTT_USERNAME=${{ secrets.MQTT_USERNAME }}
+            MQTT_PASSWORD=${{ secrets.MQTT_PASSWORD }}
             EOF
 
             # 4. Install dependencies
