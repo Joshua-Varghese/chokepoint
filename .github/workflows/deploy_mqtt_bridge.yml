@@ -21,6 +21,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: SERVICE_ACCOUNT_BASE64,MQTT_URL,MQTT_USERNAME,MQTT_PASSWORD
           script: |
             set -e
 
@@ -41,13 +42,13 @@ jobs:
             fi
 
             # 2. Restore Firebase service account from secret
-            echo "${{ secrets.SERVICE_ACCOUNT_BASE64 }}" | base64 --decode > scripts/service-account.json
+            echo "$SERVICE_ACCOUNT_BASE64" | base64 --decode > scripts/service-account.json
 
             # 3. Write .env file with MQTT credentials
-            cat > scripts/.env << 'EOF'
+            cat > scripts/.env << EOF
             MQTT_URL=mqtt://puffin.rmq2.cloudamqp.com:1883
-            MQTT_USERNAME=${{ secrets.MQTT_USERNAME }}
-            MQTT_PASSWORD=${{ secrets.MQTT_PASSWORD }}
+            MQTT_USERNAME=$MQTT_USERNAME
+            MQTT_PASSWORD=$MQTT_PASSWORD
             EOF
 
             # 4. Install dependencies
