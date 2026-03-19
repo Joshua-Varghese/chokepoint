@@ -1,0 +1,15 @@
+[Unit]
+Description=Chokepoint MQTT Bridge
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/chokepoint/scripts
+ExecStart=/usr/bin/node mqtt_bridge.js
+Restart=always
+RestartSec=5
+EnvironmentFile=/home/ubuntu/chokepoint/scripts/.env
+
+[Install]
+WantedBy=multi-user.target
