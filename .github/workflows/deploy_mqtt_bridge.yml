@@ -14,7 +14,22 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Deploy to EC2 via SSH
+
+      # 1. Prepare secrets safely on the GitHub Runner first
+      - name: Create Secrets Locally
+        run: |
+          # Create service-account.json
+          echo "${{ secrets.SERVICE_ACCOUNT_BASE64 }}" | base64 --decode > scripts/service-account.json
+
+          # Create .env
+          cat > scripts/.env << 'EOF'
+          MQTT_URL=mqtt://puffin.rmq2.cloudamqp.com:1883
+          MQTT_USERNAME=${{ secrets.MQTT_USERNAME }}
+          MQTT_PASSWORD=${{ secrets.MQTT_PASSWORD }}
+          EOF
+
+      # 2. Update Code on EC2
+      - name: Pull Code on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -22,14 +37,12 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-
-            # 0. Install Node.js if missing
+            # Install Node.js if missing
             if ! command -v node &> /dev/null; then
               curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
               sudo apt-get install -y nodejs
             fi
 
-            # 1. Pull latest code (clone if first time)
             cd /home/ubuntu
             if [ ! -d "chokepoint" ]; then
               git clone https://github.com/Joshua-Varghese/chokepoint.git
@@ -37,28 +50,32 @@ jobs:
             cd chokepoint
             git pull origin main
 
-            # 2. Restore Firebase service account from secret
-            echo "${{ secrets.SERVICE_ACCOUNT_BASE64 }}" | base64 --decode > scripts/service-account.json
+      # 3. Securely copy the secret files to EC2
+      - name: Copy Secrets to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "scripts/service-account.json,scripts/.env"
+          target: "/home/ubuntu/chokepoint/"
 
-            # 3. Write .env file with MQTT credentials
-            cat > scripts/.env << EOF
-            MQTT_URL=mqtt://puffin.rmq2.cloudamqp.com:1883
-            MQTT_USERNAME=${{ secrets.MQTT_USERNAME }}
-            MQTT_PASSWORD=${{ secrets.MQTT_PASSWORD }}
-            EOF
-
-            # 4. Install dependencies
-            cd scripts
+      # 4. Install, Setup, and Restart Service
+      - name: Install and Restart Systemd Service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/chokepoint/scripts
             npm install --omit=dev
 
-            # 5. Install / refresh the systemd unit file
             sudo cp mqtt-bridge.service /etc/systemd/system/mqtt-bridge.service
             sudo systemctl daemon-reload
             sudo systemctl enable mqtt-bridge
-
-            # 6. Restart the service
             sudo systemctl restart mqtt-bridge
 
-            # 7. Confirm it's running
             sleep 3
             sudo systemctl is-active --quiet mqtt-bridge && echo "✅ mqtt-bridge is running" || (echo "❌ mqtt-bridge failed to start" && sudo journalctl -u mqtt-bridge --no-pager -n 20 && exit 1)
