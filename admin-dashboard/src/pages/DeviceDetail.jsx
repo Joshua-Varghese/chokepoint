@@ -38,7 +38,8 @@ export default function DeviceDetail() {
         });
 
         // Connect to Local Node.js WebSocket Proxy
-        const ws = new WebSocket('ws://localhost:8080');
+        const wsUrl = import.meta.env.VITE_WS_PROXY_URL || 'ws://localhost:8080';
+        const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
             console.log("WebSocket Proxy Connected");
