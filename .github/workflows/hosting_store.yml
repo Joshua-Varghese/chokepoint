@@ -29,6 +29,8 @@ jobs:
         working-directory: ./store-frontend
 
       - name: Build Store Frontend
+        env:
+          VITE_APK_DOWNLOAD_URL: "https://${{ secrets.S3_BUCKET_NAME }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/releases/chokepoint-latest.apk"
         run: npm run build
         working-directory: ./store-frontend
 

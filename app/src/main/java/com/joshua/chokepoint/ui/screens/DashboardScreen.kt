@@ -117,7 +117,8 @@ fun DashboardScreen(
                     data = com.joshua.chokepoint.data.model.SensorData(deviceId="No Devices", airQuality="Setup Required"),
                     deviceName = "No Devices",
                     isOffline = false,
-                    ticker = ticker
+                    ticker = ticker,
+                    onRecalibrateClick = {}
                 )
             } else {
                 // Horizontal Pager for Devices
@@ -141,7 +142,8 @@ fun DashboardScreen(
                                 data = data,
                                 deviceName = device.name,
                                 isOffline = isOffline,
-                                ticker = ticker
+                                ticker = ticker,
+                                onRecalibrateClick = { onRecalibrateClick(device.id) }
                             )
                         }
                     }
@@ -268,7 +270,8 @@ fun DashboardCard(
     data: com.joshua.chokepoint.data.model.SensorData,
     deviceName: String,
     isOffline: Boolean,
-    ticker: Long
+    ticker: Long,
+    onRecalibrateClick: () -> Unit // Pass this
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -333,14 +336,27 @@ fun DashboardCard(
             }
             val statusColor = if (isOffline) Color.Gray else MaterialTheme.colorScheme.onPrimary
 
-            Text(
-                text = "$deviceName • $statusText",
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp),
-                color = statusColor,
-                style = MaterialTheme.typography.bodyMedium
-            )
+                    .padding(bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "$deviceName • $statusText",
+                    color = statusColor,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                TextButton(
+                    onClick = { onRecalibrateClick() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary)
+                ) {
+                    Text("Recalibrate", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

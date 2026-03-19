@@ -6,7 +6,9 @@ import { MapContainer, TileLayer, useMap, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
 import 'leaflet/dist/leaflet.css';
-import { ArrowRight, Wind, ShieldCheck, Activity } from 'lucide-react';
+import { ArrowRight, Wind, ShieldCheck, Activity, Smartphone, Download } from 'lucide-react';
+
+const APK_URL = import.meta.env.VITE_APK_DOWNLOAD_URL || 'https://chokepoint-releases.s3.ap-south-1.amazonaws.com/releases/chokepoint-latest.apk';
 
 // Fix Leaflet marker icons if needed (often an issue with Vite/Webpack)
 // For this simple map, we are just using tiles, so might not need markers.
@@ -136,6 +138,37 @@ export default function Home() {
                             View Live Data
                         </a>
                     </div>
+                </div>
+            </section>
+
+            {/* 1.5 APK DOWNLOAD BANNER */}
+            <section className="bg-zinc-950 border-y border-zinc-800 py-10">
+                <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                    {/* Left: Text */}
+                    <div className="flex items-center gap-5">
+                        <div className="p-3 rounded-2xl bg-white/5 border border-white/10 shrink-0">
+                            <Smartphone className="text-white" size={32} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <h2 className="text-white font-bold text-xl">Download the Chokepoint App</h2>
+                                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2 py-0.5 rounded-full">Latest</span>
+                            </div>
+                            <p className="text-gray-400 text-sm">
+                                Monitor real-time air quality, manage your ChokeUnit, and receive smart alerts — right from your Android phone.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Right: Download Button */}
+                    <a
+                        href={APK_URL}
+                        download="chokepoint-latest.apk"
+                        className="flex items-center gap-3 px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-100 active:scale-95 transition-all shadow-lg shadow-white/10 shrink-0 group"
+                    >
+                        <Download size={20} className="group-hover:translate-y-0.5 transition-transform" />
+                        Download APK
+                    </a>
                 </div>
             </section>
 
